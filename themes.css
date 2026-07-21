@@ -15,7 +15,8 @@
 
 :root,
 [data-theme="goat"] {
-  color-scheme: dark;
+  /* Los formularios viven sobre tarjetas claras: los controles nativos deben renderizarse claros */
+  color-scheme: light;
 
   --brand-lime: #c6ff00;
   --brand-lime-dim: #9acc00;
@@ -85,8 +86,9 @@
   --support-title: #c6ff00;
 
   --footer-link: #c6ff00;
-  --secondary-text: #c6ff00;
-  --secondary-border: rgba(198, 255, 0, 0.45);
+  /* Botones secundarios viven sobre tarjetas claras: texto oscuro legible, borde lima */
+  --secondary-text: #3f6212;
+  --secondary-border: rgba(122, 165, 18, 0.55);
 
   --meta-theme-color: #000000;
 }
