@@ -4268,12 +4268,22 @@ function bindChargeModalUi() {
 const EMPLOYEE_ROLE_KEY = "goatcars_role";
 const EMPLOYEE_PIN_KEY = "goatcars_employee_pin";
 const EMPLOYEE_ALLOWED_TABS = ["ventas", "facturacion", "ayuda"];
+const DEFAULT_ADMIN_PIN = "1919";
 
+function getAdminPin() {
+  try {
+    return localStorage.getItem(EMPLOYEE_PIN_KEY) || DEFAULT_ADMIN_PIN;
+  } catch {
+    return DEFAULT_ADMIN_PIN;
+  }
+}
+
+// La app arranca SIEMPRE en modo empleado; solo con el PIN se entra al modo admin.
 function isEmployeeMode() {
   try {
-    return localStorage.getItem(EMPLOYEE_ROLE_KEY) === "empleado";
+    return localStorage.getItem(EMPLOYEE_ROLE_KEY) !== "admin";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -4287,8 +4297,11 @@ function applyEmployeeMode() {
     btn.hidden = on && !EMPLOYEE_ALLOWED_TABS.includes(tab);
   });
 
-  const exitBtn = document.getElementById("btn-exit-employee");
-  if (exitBtn) exitBtn.hidden = !on;
+  const roleBtn = document.getElementById("btn-exit-employee");
+  if (roleBtn) {
+    roleBtn.hidden = false;
+    roleBtn.textContent = on ? "Modo admin (PIN)" : "Volver a modo empleado";
+  }
 
   if (on) {
     const activeTab = document.querySelector(".sidebar-nav .tab-btn.active")?.dataset.tab || "";
@@ -4297,30 +4310,30 @@ function applyEmployeeMode() {
 }
 
 function bindEmployeeModeUi() {
-  document.getElementById("btn-activate-employee")?.addEventListener("click", () => {
+  document.getElementById("btn-save-admin-pin")?.addEventListener("click", () => {
     const pinEl = document.getElementById("employee-pin");
     const pin = (pinEl?.value || "").trim();
     if (pin.length < 4) {
-      alert("Poné un PIN de al menos 4 dígitos para poder salir del modo empleado después.");
+      alert("El PIN tiene que tener al menos 4 dígitos.");
       return;
     }
     localStorage.setItem(EMPLOYEE_PIN_KEY, pin);
-    localStorage.setItem(EMPLOYEE_ROLE_KEY, "empleado");
     if (pinEl) pinEl.value = "";
-    applyEmployeeMode();
-    switchTab("ventas");
-    renderAll();
+    alert("PIN de admin actualizado en este dispositivo.");
   });
 
   document.getElementById("btn-exit-employee")?.addEventListener("click", () => {
-    const saved = localStorage.getItem(EMPLOYEE_PIN_KEY) || "";
-    const typed = prompt("PIN para salir del modo empleado:");
-    if (typed === null) return;
-    if (typed.trim() !== saved) {
-      alert("PIN incorrecto.");
-      return;
+    if (isEmployeeMode()) {
+      const typed = prompt("PIN de administrador:");
+      if (typed === null) return;
+      if (typed.trim() !== getAdminPin()) {
+        alert("PIN incorrecto.");
+        return;
+      }
+      localStorage.setItem(EMPLOYEE_ROLE_KEY, "admin");
+    } else {
+      localStorage.setItem(EMPLOYEE_ROLE_KEY, "empleado");
     }
-    localStorage.setItem(EMPLOYEE_ROLE_KEY, "admin");
     applyEmployeeMode();
     renderAll();
   });

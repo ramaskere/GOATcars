@@ -1405,18 +1405,19 @@
           </section>
 
           <section class="card" id="employee-mode-card">
-            <h2>Vista de empleado</h2>
+            <h2>Modo empleado / admin</h2>
             <p class="section-hint">
-              En modo empleado la app solo muestra <strong>Ventas</strong> (ingresar autos, línea de trabajo y cobrar) y
-              <strong>Facturación</strong>. No se ven Caja, Resumen, ingresos ni resultados. Para salir del modo se pide el PIN.
+              La app arranca <strong>siempre en modo empleado</strong>: solo Ventas (ingresar autos, línea de trabajo, cobrar) y
+              Facturación, sin caja ni resultados. Para entrar al modo admin se usa el botón de abajo del menú con el
+              <strong>PIN de administrador</strong> (por defecto <strong>1919</strong>). Acá podés cambiarlo para este dispositivo.
             </p>
             <div class="grid">
               <label>
-                PIN para salir (4 dígitos o más)
-                <input id="employee-pin" type="password" inputmode="numeric" placeholder="Ej: 2580" autocomplete="off" />
+                Nuevo PIN de admin (4 dígitos o más)
+                <input id="employee-pin" type="password" inputmode="numeric" placeholder="Ej: 1919" autocomplete="off" />
               </label>
               <div class="form-actions form-actions--inline">
-                <button type="button" id="btn-activate-employee">Activar modo empleado</button>
+                <button type="button" id="btn-save-admin-pin">Guardar PIN</button>
               </div>
             </div>
           </section>
@@ -1849,7 +1850,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="./config.js?v=1"></script>
-    <script src="./app.js?v=5"></script>
+    <script src="./app.js?v=6"></script>
     <script src="./business-extras.js?v=1"></script>
   </body>
 </html>
