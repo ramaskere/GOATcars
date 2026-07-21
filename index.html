@@ -17,7 +17,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="icon" href="./assets/logo.png" type="image/png" />
     <link rel="stylesheet" href="./themes.css?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=6" />
+    <link rel="stylesheet" href="./styles.css?v=7" />
     <script>
       (function () {
         var map = {
@@ -760,12 +760,21 @@
                   <input id="qc-plate" type="text" placeholder="Ej: AB123CD" required class="quick-checkin-plate" />
                 </label>
                 <label>
+                  Teléfono
+                  <input id="qc-phone" type="tel" placeholder="Obligatorio si es cliente nuevo" />
+                </label>
+                <label>
+                  Nombre del cliente
+                  <input id="qc-name" type="text" placeholder="Opcional" />
+                </label>
+                <label>
                   ¿Quién lo lava?
                   <select id="qc-seller">
                     <option value="">Sin asignar</option>
                   </select>
                 </label>
               </div>
+              <p id="qc-client-hint" class="quick-checkin-client-hint muted" hidden></p>
               <div class="quick-checkin-services">
                 <span class="quick-checkin-services__label">Servicio</span>
                 <div id="qc-service-options" class="qc-service-options" role="radiogroup" aria-label="Servicio"></div>
@@ -810,6 +819,95 @@
                 <button type="button" class="charge-method-btn" data-method="otro">✳️ Otro</button>
               </div>
               <button type="button" id="charge-confirm" class="charge-confirm" disabled>Confirmar cobro</button>
+            </div>
+          </div>
+
+          <div
+            id="simple-edit-modal"
+            class="sale-modal"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="simple-edit-title"
+            aria-hidden="true"
+          >
+            <div class="sale-modal__backdrop" id="simple-edit-backdrop" aria-hidden="true"></div>
+            <div class="sale-modal__panel card glass-panel" role="document">
+              <div class="sale-modal__header">
+                <h2 id="simple-edit-title">Editar lavado</h2>
+                <button type="button" class="sale-modal__close" id="simple-edit-close" aria-label="Cerrar">×</button>
+              </div>
+              <div class="sale-modal__scroll">
+                <form id="simple-edit-form" class="sale-form" autocomplete="off">
+                  <div class="grid">
+                    <label>
+                      Día
+                      <input id="se-date" type="date" required />
+                    </label>
+                    <label>
+                      Nombre del cliente
+                      <input id="se-name" type="text" placeholder="Opcional" />
+                    </label>
+                    <label>
+                      Teléfono
+                      <input id="se-phone" type="tel" placeholder="Ej: 11 5555-5555" />
+                    </label>
+                    <label>
+                      Marca del auto
+                      <input id="se-brand" type="text" placeholder="Ej: Toyota" />
+                    </label>
+                    <label>
+                      Patente
+                      <input id="se-plate" type="text" class="quick-checkin-plate" required />
+                    </label>
+                    <label>
+                      Servicio
+                      <select id="se-service"></select>
+                    </label>
+                    <label>
+                      Precio (ARS)
+                      <input id="se-price" type="number" min="0" step="1" inputmode="numeric" required />
+                    </label>
+                    <label>
+                      ¿Quién lo lava?
+                      <select id="se-seller"></select>
+                    </label>
+                    <label>
+                      Estado
+                      <select id="se-status">
+                        <option value="en_proceso">En proceso</option>
+                        <option value="terminado">Terminado</option>
+                        <option value="entregado">Entregado</option>
+                      </select>
+                    </label>
+                  </div>
+                  <fieldset class="simple-edit-pay">
+                    <legend>Cobrado (dejalo en 0 si todavía no pagó)</legend>
+                    <div class="grid">
+                      <label>
+                        Efectivo
+                        <input id="se-pay-cash" type="number" min="0" step="1" inputmode="numeric" value="0" />
+                      </label>
+                      <label>
+                        Transferencia
+                        <input id="se-pay-transfer" type="number" min="0" step="1" inputmode="numeric" value="0" />
+                      </label>
+                      <label>
+                        Tarjeta
+                        <input id="se-pay-card" type="number" min="0" step="1" inputmode="numeric" value="0" />
+                      </label>
+                      <label>
+                        Otro
+                        <input id="se-pay-other" type="number" min="0" step="1" inputmode="numeric" value="0" />
+                      </label>
+                    </div>
+                  </fieldset>
+                  <div class="sale-modal__form-actions">
+                    <button type="button" class="secondary" id="simple-edit-cancel">Cancelar</button>
+                    <button type="submit">Guardar cambios</button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
 
@@ -1850,7 +1948,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="./config.js?v=1"></script>
-    <script src="./app.js?v=6"></script>
+    <script src="./app.js?v=7"></script>
     <script src="./business-extras.js?v=1"></script>
   </body>
 </html>

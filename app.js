@@ -1603,7 +1603,8 @@ function patchCachedSaleAfterEdit(saleId, patch) {
     local[li] = merge(local[li]);
     writeList(KEYS.sales, local);
   }
-  mirrorCloudCachesToLocal();
+  // Solo espejar cachés en modo nube: en modo local las cachés están vacías y borrarían los datos.
+  if (useCloud) mirrorCloudCachesToLocal();
 }
 
 function formatSaleImeiForStorage(line) {
@@ -3275,7 +3276,12 @@ function resetSaleModalFields() {
   renderSaleCart();
 }
 
+// Todas las ediciones pasan por el modal simple de lavadero; el modal grande queda como legado.
 function openSaleModalForEdit(saleId) {
+  openSimpleEditModal(saleId);
+}
+
+function openLegacySaleModalForEdit(saleId) {
   const sale = getSales().find((s) => String(s.id) === String(saleId));
   if (!sale) return;
   if (!saleModal) return;
@@ -3921,9 +3927,233 @@ function bindCarQueueUi() {
   });
 }
 
+/* ========== Editar lavado (modal simple) ========== */
+
+let simpleEditSaleId = null;
+
+function openSimpleEditModal(saleId) {
+  const sale = getSales().find((s) => String(s.id) === String(saleId));
+  if (!sale) return;
+  simpleEditSaleId = sale.id;
+
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  set("se-date", sale.date || localTodayIso());
+  set("se-name", sale.client && sale.client !== sale.color ? sale.client : "");
+  set("se-phone", sale.phone || "");
+  set("se-brand", sale.storage || "");
+  set("se-plate", sale.color || "");
+  set("se-price", String(numeric(sale.unitSale, 0)));
+  set("se-status", normalizeSaleStatus(sale.status));
+  set("se-pay-cash", String(numeric(sale.paymentCash, 0)));
+  set("se-pay-transfer", String(numeric(sale.paymentTransfer, 0)));
+  set("se-pay-card", String(numeric(sale.paymentCard, 0)));
+  set("se-pay-other", String(numeric(sale.paymentOther, 0)));
+
+  const svcSel = document.getElementById("se-service");
+  if (svcSel) {
+    svcSel.innerHTML = "";
+    const cur = document.createElement("option");
+    cur.value = "";
+    cur.textContent = `${sale.model || "Servicio"} (actual)`;
+    svcSel.appendChild(cur);
+    getServices()
+      .filter((s) => s.active !== false)
+      .forEach((svc) => {
+        const o = document.createElement("option");
+        o.value = String(svc.id);
+        o.textContent = `${svc.name} — ${currency(numeric(svc.price, 0))}`;
+        svcSel.appendChild(o);
+      });
+    svcSel.value = "";
+  }
+
+  const sellerSel = document.getElementById("se-seller");
+  if (sellerSel) {
+    sellerSel.innerHTML = "";
+    const o0 = document.createElement("option");
+    o0.value = "";
+    o0.textContent = "Sin asignar";
+    sellerSel.appendChild(o0);
+    getSellers()
+      .filter((sp) => sp.active || String(sp.id) === String(sale.sellerId))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+      .forEach((sp) => {
+        const o = document.createElement("option");
+        o.value = String(sp.id);
+        o.textContent = sp.active ? sp.name : `${sp.name} (inactivo)`;
+        sellerSel.appendChild(o);
+      });
+    sellerSel.value = sale.sellerId ? String(sale.sellerId) : "";
+  }
+
+  const modal = document.getElementById("simple-edit-modal");
+  if (modal) {
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closeSimpleEditModal() {
+  const modal = document.getElementById("simple-edit-modal");
+  if (modal) {
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+  }
+  simpleEditSaleId = null;
+}
+
+async function saveSimpleEdit() {
+  const sale = getSales().find((s) => String(s.id) === String(simpleEditSaleId));
+  if (!sale) return;
+
+  const val = (id) => document.getElementById(id)?.value ?? "";
+  const date = val("se-date") || sale.date;
+  const name = val("se-name").trim();
+  const phone = val("se-phone").trim();
+  const brand = val("se-brand").trim();
+  const plate = val("se-plate").trim().toUpperCase().replace(/\s+/g, "");
+  if (!plate) return alert("Falta la patente.");
+
+  const svcSel = document.getElementById("se-service");
+  const svc = getServices().find((s) => String(s.id) === String(svcSel?.value || ""));
+  const serviceName = svc ? svc.name : sale.model;
+  const qty = Math.max(1, numeric(sale.quantity, 1));
+  const unitSale = Math.max(0, numeric(val("se-price"), 0));
+  const unitCost = svc ? numeric(svc.cost, 0) : numeric(sale.unitCost, 0);
+  const saleTotal = unitSale * qty;
+  const costTotal = unitCost * qty;
+  const profit = saleTotal - costTotal;
+
+  const payCash = Math.max(0, numeric(val("se-pay-cash"), 0));
+  const payTransfer = Math.max(0, numeric(val("se-pay-transfer"), 0));
+  const payCard = Math.max(0, numeric(val("se-pay-card"), 0));
+  const payOther = Math.max(0, numeric(val("se-pay-other"), 0));
+
+  const status = normalizeSaleStatus(val("se-status"));
+  const finishedAt =
+    status === "en_proceso" ? null : sale.finishedAt || new Date().toISOString();
+
+  const sellerVal = document.getElementById("se-seller")?.value || "";
+  const comm = computeSaleCommission(sellerVal || null, saleTotal);
+  const client = name || plate;
+
+  if (useCloud) {
+    try {
+      const userId = await getUserId();
+      const payload = {
+        sale_date: date,
+        client_name: client,
+        phone,
+        service_name: serviceName,
+        vehicle_plate: plate,
+        vehicle_brand: brand,
+        unit_sale: unitSale,
+        unit_cost: unitCost,
+        sale_total: saleTotal,
+        cost_total: costTotal,
+        profit,
+        payment_cash: payCash,
+        payment_transfer: payTransfer,
+        payment_card: payCard,
+        payment_other: payOther,
+        seller_id: comm.sellerId,
+        commission_pct_applied: comm.commissionPctApplied,
+        commission_amount: comm.commissionAmount,
+        status,
+        finished_at: finishedAt,
+      };
+      let { error } = await supabaseClient
+        .from("sales")
+        .update(payload)
+        .eq("user_id", userId)
+        .eq("id", sale.id);
+      if (error && /schema cache|could not find/i.test(error.message || "")) {
+        const { status: _a, finished_at: _b, ...legacy } = payload;
+        ({ error } = await supabaseClient
+          .from("sales")
+          .update(legacy)
+          .eq("user_id", userId)
+          .eq("id", sale.id));
+      }
+      if (error) throw error;
+      await syncCommissionCashFromSale(userId, sale.id, date, client, comm.commissionAmount, comm.sellerId);
+    } catch (e) {
+      alert(`No se pudo guardar la edición: ${e?.message || e}`);
+      return;
+    }
+  } else {
+    await syncCommissionCashFromSale(null, sale.id, date, client, comm.commissionAmount, comm.sellerId);
+  }
+
+  patchCachedSaleAfterEdit(sale.id, {
+    date,
+    client,
+    phone,
+    model: serviceName,
+    color: plate,
+    storage: brand,
+    unitSale,
+    unitCost,
+    saleTotal,
+    costTotal,
+    profit,
+    paymentCash: payCash,
+    paymentTransfer: payTransfer,
+    paymentCard: payCard,
+    paymentOther: payOther,
+    sellerId: comm.sellerId,
+    commissionPctApplied: comm.commissionPctApplied,
+    commissionAmount: comm.commissionAmount,
+    status,
+    finishedAt,
+  });
+
+  closeSimpleEditModal();
+  renderAll();
+}
+
+function bindSimpleEditUi() {
+  document.getElementById("simple-edit-close")?.addEventListener("click", closeSimpleEditModal);
+  document.getElementById("simple-edit-cancel")?.addEventListener("click", closeSimpleEditModal);
+  document.getElementById("simple-edit-backdrop")?.addEventListener("click", closeSimpleEditModal);
+
+  document.getElementById("se-service")?.addEventListener("change", () => {
+    const svc = getServices().find(
+      (s) => String(s.id) === String(document.getElementById("se-service")?.value || "")
+    );
+    if (svc) {
+      const priceEl = document.getElementById("se-price");
+      if (priceEl) priceEl.value = String(numeric(svc.price, 0));
+    }
+  });
+
+  const plateEl = document.getElementById("se-plate");
+  plateEl?.addEventListener("input", () => {
+    plateEl.value = plateEl.value.toUpperCase();
+  });
+
+  document.getElementById("simple-edit-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void saveSimpleEdit();
+  });
+}
+
 /* ========== Ingreso rápido de autos ========== */
 
 let qcSelectedServiceId = null;
+
+/** Última venta registrada para una patente (para autocompletar cliente y validar teléfono). */
+function findPlateHistory(plate) {
+  const p = String(plate || "").toUpperCase().replace(/\s+/g, "");
+  if (!p) return null;
+  const matches = getSales()
+    .filter((s) => String(s.color || "").toUpperCase().replace(/\s+/g, "") === p)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  return matches[0] || null;
+}
 
 function refreshQcSellerSelect() {
   const sel = document.getElementById("qc-seller");
@@ -3975,14 +4205,30 @@ async function saveQuickCheckin() {
   const dateEl = document.getElementById("qc-date");
   const brandEl = document.getElementById("qc-brand");
   const plateEl = document.getElementById("qc-plate");
+  const phoneEl = document.getElementById("qc-phone");
+  const nameEl = document.getElementById("qc-name");
   const date = dateEl?.value || localTodayIso();
   const brand = (brandEl?.value || "").trim();
   const plate = (plateEl?.value || "").trim().toUpperCase().replace(/\s+/g, "");
+  const phoneTyped = (phoneEl?.value || "").trim();
+  const nameTyped = (nameEl?.value || "").trim();
   const service = getServices().find((s) => String(s.id) === String(qcSelectedServiceId));
 
   if (!brand) return alert("Falta la marca del auto.");
   if (!plate) return alert("Falta la patente.");
   if (!service) return alert("Elegí un servicio (tocá uno de los botones).");
+
+  // Cliente nuevo (patente sin historial) → teléfono obligatorio para poder contactarlo.
+  const history = findPlateHistory(plate);
+  const historyPhone = (history?.phone || "").trim();
+  if (!phoneTyped && !historyPhone) {
+    alert(`La patente ${plate} no tiene historial: cargá un teléfono para poder contactar al cliente.`);
+    phoneEl?.focus();
+    return;
+  }
+  const phone = phoneTyped || historyPhone;
+  const historyName = history && history.client !== history.color ? history.client : "";
+  const clientName = nameTyped || historyName || plate;
 
   const price = numeric(service.price, 0);
   const cost = numeric(service.cost, 0);
@@ -3997,8 +4243,8 @@ async function saveQuickCheckin() {
       const payload = {
         user_id: userId,
         sale_date: date,
-        client_name: plate,
-        phone: "",
+        client_name: clientName,
+        phone,
         ig_handle: "",
         service_name: service.name,
         vehicle_plate: plate,
@@ -4034,7 +4280,7 @@ async function saveQuickCheckin() {
       }
       if (error) throw error;
       if (insRow?.id) {
-        await syncCommissionCashFromSale(userId, insRow.id, date, plate, comm.commissionAmount, comm.sellerId);
+        await syncCommissionCashFromSale(userId, insRow.id, date, clientName, comm.commissionAmount, comm.sellerId);
       }
     } catch (e) {
       alert(`No se pudo ingresar el auto: ${e?.message || e}`);
@@ -4046,8 +4292,8 @@ async function saveQuickCheckin() {
     sales.unshift({
       id: newSaleId,
       date,
-      client: plate,
-      phone: "",
+      client: clientName,
+      phone,
       igHandle: "",
       model: service.name,
       color: plate,
@@ -4074,11 +4320,15 @@ async function saveQuickCheckin() {
       finishedAt: null,
     });
     writeList(KEYS.sales, sales);
-    await syncCommissionCashFromSale(null, newSaleId, date, plate, comm.commissionAmount, comm.sellerId);
+    await syncCommissionCashFromSale(null, newSaleId, date, clientName, comm.commissionAmount, comm.sellerId);
   }
 
   if (brandEl) brandEl.value = "";
   if (plateEl) plateEl.value = "";
+  if (phoneEl) phoneEl.value = "";
+  if (nameEl) nameEl.value = "";
+  const hintEl = document.getElementById("qc-client-hint");
+  if (hintEl) hintEl.hidden = true;
   qcSelectedServiceId = null;
 
   const feedback = document.getElementById("qc-feedback");
@@ -4103,6 +4353,33 @@ function bindQuickCheckinUi() {
   const plateEl = document.getElementById("qc-plate");
   plateEl?.addEventListener("input", () => {
     plateEl.value = plateEl.value.toUpperCase();
+  });
+
+  // Con patente conocida: autocompleta nombre/teléfono y avisa; con patente nueva pide teléfono.
+  plateEl?.addEventListener("change", () => {
+    const hintEl = document.getElementById("qc-client-hint");
+    const phoneEl = document.getElementById("qc-phone");
+    const nameEl = document.getElementById("qc-name");
+    const plate = (plateEl.value || "").trim().toUpperCase().replace(/\s+/g, "");
+    if (!plate) {
+      if (hintEl) hintEl.hidden = true;
+      return;
+    }
+    const history = findPlateHistory(plate);
+    if (history) {
+      const historyName = history.client !== history.color ? history.client : "";
+      if (nameEl && !nameEl.value.trim() && historyName) nameEl.value = historyName;
+      if (phoneEl && !phoneEl.value.trim() && history.phone) phoneEl.value = history.phone;
+      if (hintEl) {
+        hintEl.textContent = `✓ Patente conocida (última visita: ${history.date}). Datos del cliente autocompletados.`;
+        hintEl.classList.remove("quick-checkin-client-hint--warn");
+        hintEl.hidden = false;
+      }
+    } else if (hintEl) {
+      hintEl.textContent = `Patente nueva: cargá un teléfono para poder contactar al cliente.`;
+      hintEl.classList.add("quick-checkin-client-hint--warn");
+      hintEl.hidden = false;
+    }
   });
 
   document.getElementById("qc-service-options")?.addEventListener("click", (event) => {
@@ -13885,6 +14162,7 @@ async function initApp() {
   bindCarQueueUi();
   bindQuickCheckinUi();
   bindChargeModalUi();
+  bindSimpleEditUi();
   bindEmployeeModeUi();
   applyEmployeeMode();
   renderAll();

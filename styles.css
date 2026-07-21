@@ -8842,3 +8842,16 @@ body.role-empleado #tab-ventas table td:nth-child(8) {
 .car-queue-card__seller {
   font-size: 12px;
 }
+
+.quick-checkin-client-hint {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #15803d;
+}
+.quick-checkin-client-hint--warn {
+  color: #b45309;
+}
+.simple-edit-pay {
+  margin-top: 4px;
+}
