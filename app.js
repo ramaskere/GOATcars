@@ -11865,7 +11865,7 @@ if (invBulkImportBtn) {
   invBulkImportBtn.addEventListener("click", () => importInvBulkPreview());
 }
 
-inventoryForm.addEventListener("submit", async (event) => {
+inventoryForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const model = invModel.value.trim();
   const color = invColor.value.trim();
