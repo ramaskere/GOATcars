@@ -8467,3 +8467,114 @@ html[data-theme="goat"] .sidebar-nav .tab-btn.active {
   color: #0a0a0a;
   font-weight: 800;
 }
+
+/* ===== Seguimiento de autos (cola del lavadero) ===== */
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.status-badge--en_proceso {
+  background: rgba(59, 130, 246, 0.16);
+  border-color: rgba(59, 130, 246, 0.45);
+  color: #60a5fa;
+}
+.status-badge--terminado {
+  background: rgba(234, 179, 8, 0.16);
+  border-color: rgba(234, 179, 8, 0.45);
+  color: #facc15;
+}
+.status-badge--entregado {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(34, 197, 94, 0.45);
+  color: #4ade80;
+}
+
+.car-queue-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.car-queue__empty {
+  grid-column: 1 / -1;
+  padding: 10px 2px;
+}
+.car-queue-card {
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.car-queue-card--en_proceso {
+  border-left: 4px solid #3b82f6;
+}
+.car-queue-card--terminado {
+  border-left: 4px solid #eab308;
+}
+.car-queue-card--entregado {
+  border-left: 4px solid #22c55e;
+  opacity: 0.75;
+}
+.car-queue-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.car-queue-card__plate {
+  font-size: 18px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.car-queue-card__services {
+  font-size: 13px;
+}
+.car-queue-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.car-queue-card__total {
+  font-weight: 700;
+}
+.car-queue-card__late {
+  font-size: 11px;
+  color: #f87171;
+}
+.car-queue-card__action {
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+.car-queue-card__action--deliver {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.18);
+  color: #86efac;
+}
+.car-queue-card__action:hover {
+  filter: brightness(1.2);
+}
+.car-queue-card__done {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4ade80;
+}
+.section-kpi-row--ventas-hoy {
+  margin-bottom: 10px;
+}

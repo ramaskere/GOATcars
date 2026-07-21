@@ -1235,6 +1235,20 @@ function resolveInventoryMatchForSaleLine(inventory, pickedId, model, color, sto
   return { match, deductInventory };
 }
 
+// Estados del auto en el lavadero: ingresa "en_proceso", pasa a "terminado" y se cierra "entregado".
+const SALE_STATUS_FLOW = ["en_proceso", "terminado", "entregado"];
+const SALE_STATUS_LABELS = {
+  en_proceso: "En proceso",
+  terminado: "Terminado",
+  entregado: "Entregado",
+};
+
+function normalizeSaleStatus(value) {
+  const s = String(value || "").trim();
+  // Ventas viejas (sin estado) se consideran entregadas para no ensuciar la cola.
+  return SALE_STATUS_FLOW.includes(s) ? s : "entregado";
+}
+
 function normalizeSale(s) {
   if (!s) return s;
   let commissionPctApplied =
@@ -1264,6 +1278,9 @@ function normalizeSale(s) {
     commissionAmount: numeric(s.commissionAmount ?? s.commission_amount, 0),
     commissionPaid: Boolean(s.commissionPaid ?? s.commission_paid),
     commissionPaidAt: s.commissionPaidAt ?? s.commission_paid_at ?? null,
+    status: normalizeSaleStatus(s.status),
+    orderId: s.orderId ?? s.order_id ?? null,
+    finishedAt: s.finishedAt ?? s.finished_at ?? null,
   };
 }
 
@@ -2468,6 +2485,9 @@ function saleFromRow(row) {
     commission_amount: row.commission_amount,
     commission_paid: row.commission_paid,
     commission_paid_at: row.commission_paid_at,
+    status: row.status,
+    order_id: row.order_id ?? null,
+    finished_at: row.finished_at ?? null,
   });
 }
 
@@ -3674,7 +3694,7 @@ function renderSales() {
   sales.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   salesBody.innerHTML = "";
   if (sales.length === 0) {
-    renderViewFilterEmptyRow(salesBody, 9, "sales", "ventas");
+    renderViewFilterEmptyRow(salesBody, 10, "sales", "ventas");
     return;
   }
 
@@ -3698,12 +3718,174 @@ function renderSales() {
       <td>${currency(sale.saleTotal)}</td>
       <td class="payment-summary">${formatPaymentSummary(sale)}</td>
       <td>${formatSaleProfitCell(sale)}</td>
+      <td>${renderSaleStatusBadge(sale.status)}</td>
       <td>
         <button type="button" class="secondary edit-sale-btn" data-id="${sale.id}">Editar</button>
         <button class="delete-btn" data-id="${sale.id}" data-type="sale">Eliminar</button>
       </td>
     `;
     salesBody.appendChild(row);
+  });
+}
+
+/* ========== Seguimiento de autos (cola del lavadero) ========== */
+
+function localTodayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function renderSaleStatusBadge(status) {
+  const st = normalizeSaleStatus(status);
+  return `<span class="status-badge status-badge--${st}">${SALE_STATUS_LABELS[st]}</span>`;
+}
+
+// Agrupa las líneas de venta por ingreso (order_id). Ventas viejas sin order_id cuentan como 1 auto cada una.
+function getCarQueueOrders() {
+  const groups = new Map();
+  getSales().forEach((sale) => {
+    const key = sale.orderId ? `ord:${sale.orderId}` : `sale:${sale.id}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        orderId: sale.orderId || null,
+        firstSaleId: sale.id,
+        date: sale.date || "",
+        client: sale.client || "",
+        plate: sale.color || "",
+        brand: sale.storage || "",
+        vehicleModel: sale.battery || "",
+        vehicleType: sale.imei || "",
+        services: [],
+        total: 0,
+        status: normalizeSaleStatus(sale.status),
+        finishedAt: sale.finishedAt || null,
+      });
+    }
+    const g = groups.get(key);
+    g.services.push({ name: sale.model || "Servicio", qty: numeric(sale.quantity, 1) });
+    g.total += numeric(sale.saleTotal, 0);
+    const st = normalizeSaleStatus(sale.status);
+    if (SALE_STATUS_FLOW.indexOf(st) < SALE_STATUS_FLOW.indexOf(g.status)) g.status = st;
+  });
+  return [...groups.values()];
+}
+
+function renderCarQueue() {
+  const listEl = document.getElementById("car-queue-list");
+  const orders = getCarQueueOrders();
+  const today = localTodayIso();
+
+  const ingresadosHoy = orders.filter((o) => o.date === today).length;
+  const enProceso = orders.filter((o) => o.status === "en_proceso").length;
+  const terminadosHoy = orders.filter((o) => o.date === today && o.status !== "en_proceso").length;
+
+  const kIn = document.getElementById("ventas-kpi-hoy-ingresados");
+  const kProc = document.getElementById("ventas-kpi-hoy-proceso");
+  const kFin = document.getElementById("ventas-kpi-hoy-terminados");
+  if (kIn) kIn.textContent = String(ingresadosHoy);
+  if (kProc) kProc.textContent = String(enProceso);
+  if (kFin) kFin.textContent = String(terminadosHoy);
+
+  if (!listEl) return;
+
+  // En la cola: todo lo pendiente (de cualquier día, para no perder autos) + lo de hoy ya cerrado.
+  const visible = orders
+    .filter((o) => o.status !== "entregado" || o.date === today)
+    .sort((a, b) => {
+      const diff = SALE_STATUS_FLOW.indexOf(a.status) - SALE_STATUS_FLOW.indexOf(b.status);
+      if (diff !== 0) return diff;
+      return String(b.date).localeCompare(String(a.date));
+    });
+
+  listEl.innerHTML = "";
+  if (visible.length === 0) {
+    listEl.innerHTML = `<p class="muted car-queue__empty">Sin autos en el lavadero. Registrá un ingreso con “Nueva venta / Ingreso”.</p>`;
+    return;
+  }
+
+  visible.forEach((o) => {
+    const card = document.createElement("article");
+    card.className = `car-queue-card car-queue-card--${o.status}`;
+    const vehicleLine = [o.brand, o.vehicleModel, o.vehicleType].filter(Boolean).join(" · ");
+    const servicesLine = o.services
+      .map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${escapeHtml(s.name)}`)
+      .join(" + ");
+    const isOldPending = o.status === "en_proceso" && o.date && o.date < today;
+    let actionHtml = "";
+    if (o.status === "en_proceso") {
+      actionHtml = `<button type="button" class="car-queue-card__action queue-status-btn" data-key="${escapeHtml(o.key)}" data-next="terminado">Marcar terminado</button>`;
+    } else if (o.status === "terminado") {
+      actionHtml = `<button type="button" class="car-queue-card__action car-queue-card__action--deliver queue-status-btn" data-key="${escapeHtml(o.key)}" data-next="entregado">Entregar auto</button>`;
+    } else {
+      actionHtml = `<span class="car-queue-card__done">✓ Entregado</span>`;
+    }
+    card.innerHTML = `
+      <div class="car-queue-card__top">
+        <strong class="car-queue-card__plate">${escapeHtml(o.plate || "Sin patente")}</strong>
+        ${renderSaleStatusBadge(o.status)}
+      </div>
+      <div class="car-queue-card__vehicle muted">${escapeHtml(vehicleLine || "Vehículo sin datos")}</div>
+      <div class="car-queue-card__client">${escapeHtml(o.client || "—")}</div>
+      <div class="car-queue-card__services">${servicesLine || "—"}</div>
+      <div class="car-queue-card__foot">
+        <span class="car-queue-card__total">${currency(o.total)}</span>
+        ${isOldPending ? `<span class="car-queue-card__late">Ingresó el ${escapeHtml(o.date)}</span>` : ""}
+        ${actionHtml}
+      </div>
+    `;
+    listEl.appendChild(card);
+  });
+}
+
+async function setCarOrderStatus(orderKey, nextStatus) {
+  const status = normalizeSaleStatus(nextStatus);
+  const order = getCarQueueOrders().find((o) => o.key === orderKey);
+  if (!order) return;
+
+  const affected = getSales().filter((s) =>
+    order.orderId ? String(s.orderId) === String(order.orderId) : String(s.id) === String(order.firstSaleId)
+  );
+  if (affected.length === 0) return;
+
+  const finishedAt =
+    status === "terminado" ? new Date().toISOString() : affected[0].finishedAt || null;
+
+  if (useCloud) {
+    try {
+      const userId = await getUserId();
+      let query = supabaseClient
+        .from("sales")
+        .update({ status, finished_at: finishedAt })
+        .eq("user_id", userId);
+      query = order.orderId ? query.eq("order_id", order.orderId) : query.eq("id", order.firstSaleId);
+      const { error } = await query;
+      if (error) {
+        if (/schema cache|could not find/i.test(error.message || "")) {
+          alert(
+            "Tu base todavía no tiene las columnas de estado. Ejecutá supabase/migration_estado_autos.sql en el SQL Editor de Supabase."
+          );
+          return;
+        }
+        throw error;
+      }
+    } catch (e) {
+      alert(`No se pudo actualizar el estado: ${e?.message || e}`);
+      return;
+    }
+  }
+
+  affected.forEach((s) => patchCachedSaleAfterEdit(s.id, { status, finishedAt }));
+  renderAll();
+}
+
+function bindCarQueueUi() {
+  const listEl = document.getElementById("car-queue-list");
+  listEl?.addEventListener("click", (event) => {
+    const btn = event.target instanceof HTMLElement ? event.target.closest(".queue-status-btn") : null;
+    if (!btn) return;
+    btn.disabled = true;
+    void setCarOrderStatus(btn.dataset.key || "", btn.dataset.next || "");
   });
 }
 
@@ -10098,6 +10280,7 @@ function renderAll() {
   updatePeriodBarNote();
   bindViewFilterControls();
   renderSales();
+  renderCarQueue();
   renderSellersTable();
   renderSellerStats();
   refreshSaleSellerSelect();
@@ -10283,6 +10466,8 @@ saleForm.addEventListener("submit", async (event) => {
   const clientPhoneForPipeline = salePhone ? salePhone.value.trim() : "";
   const clientIgForPipeline = saleIg ? saleIg.value.trim() : "";
   let firstSaleIdForPipeline = null;
+  // Un mismo ingreso (auto + servicios del carrito) comparte order_id para seguirlo como unidad.
+  const saleOrderId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `ord-${Date.now()}`;
 
   function getMatchForSavedLine(line, inventory) {
     if (line.matchId) {
@@ -10526,20 +10711,22 @@ saleForm.addEventListener("submit", async (event) => {
           seller_id: comm.sellerId,
           commission_pct_applied: comm.commissionPctApplied,
           commission_amount: comm.commissionAmount,
+          status: "en_proceso",
+          order_id: saleOrderId,
+          finished_at: null,
         };
         let { data: insRow, error: saleErr } = await supabaseClient
           .from("sales")
           .insert(salePayload)
           .select("id")
           .single();
-        if (
-          saleErr &&
-          /schema cache|could not find.*ig_handle.*sales/i.test(saleErr.message || "")
-        ) {
-          const { ig_handle: _omitIg, ...salePayloadNoIg } = salePayload;
+        if (saleErr && /schema cache|could not find/i.test(saleErr.message || "")) {
+          // Base sin migrar (faltan ig_handle/status/order_id): reintentar sin esas columnas.
+          const { ig_handle: _omitIg, status: _omitSt, order_id: _omitOrd, finished_at: _omitFin, ...salePayloadLegacy } =
+            salePayload;
           ({ data: insRow, error: saleErr } = await supabaseClient
             .from("sales")
-            .insert(salePayloadNoIg)
+            .insert(salePayloadLegacy)
             .select("id")
             .single());
         }
@@ -10640,6 +10827,9 @@ saleForm.addEventListener("submit", async (event) => {
         sellerId: comm.sellerId,
         commissionPctApplied: comm.commissionPctApplied,
         commissionAmount: comm.commissionAmount,
+        status: "en_proceso",
+        orderId: saleOrderId,
+        finishedAt: null,
       });
       await syncCommissionCashFromSale(
         null,
@@ -13240,6 +13430,7 @@ async function initApp() {
   syncCashEgresoKindUi();
   ensureDefaultServicesLocal();
   bindServicesUi();
+  bindCarQueueUi();
   renderAll();
 
   if (!isCloudConfigured()) {

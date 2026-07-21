@@ -67,11 +67,17 @@ create table if not exists public.sales (
   commission_amount numeric not null default 0 check (commission_amount >= 0),
   commission_paid boolean not null default false,
   commission_paid_at timestamptz,
+  -- Seguimiento del auto en el lavadero
+  status text not null default 'en_proceso' check (status in ('en_proceso', 'terminado', 'entregado')),
+  order_id uuid,
+  finished_at timestamptz,
   created_at timestamptz default now()
 );
 
 create index if not exists sales_user_date on public.sales (user_id, sale_date desc);
 create index if not exists sales_user_plate on public.sales (user_id, vehicle_plate);
+create index if not exists sales_user_status on public.sales (user_id, status);
+create index if not exists sales_user_order on public.sales (user_id, order_id);
 
 alter table public.sales enable row level security;
 
