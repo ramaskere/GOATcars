@@ -1334,7 +1334,7 @@ function commissionCashConceptBase(saleId) {
 
 function commissionCashConcept(saleId, clientName) {
   const c = (clientName || "").trim().slice(0, 50);
-  return `${commissionCashConceptBase(saleId)}|Comisión vendedor · ${c || "Venta"}`;
+  return `${commissionCashConceptBase(saleId)}|Comisión empleado · ${c || "Venta"}`;
 }
 
 function removeCommissionCashRowsLocal(saleId) {
@@ -1406,7 +1406,7 @@ function formatSaleSellerCell(sale) {
   const sid = sale.sellerId || sale.seller_id;
   if (!sid) return "—";
   const name = getSellerNameById(sid);
-  const label = name || "Vendedor (sin datos)";
+  const label = name || "Empleado (sin datos)";
   const ca = numeric(sale.commissionAmount, 0) || computeSaleCommission(String(sid), numeric(sale.saleTotal, 0)).commissionAmount;
   if (ca > 0) {
     const paidBadge = sale.commissionPaid
@@ -1429,7 +1429,7 @@ function refreshSaleSellerSelect() {
   saleSeller.innerHTML = "";
   const o0 = document.createElement("option");
   o0.value = "";
-  o0.textContent = "Sin vendedor";
+  o0.textContent = "Sin asignar";
   saleSeller.appendChild(o0);
   for (const sp of sellers) {
     if (!sp.active && String(sp.id) !== String(keepInactiveId)) continue;
@@ -1441,7 +1441,7 @@ function refreshSaleSellerSelect() {
   if (keepInactiveId && !sellers.some((x) => String(x.id) === String(keepInactiveId))) {
     const o = document.createElement("option");
     o.value = String(keepInactiveId);
-    o.textContent = "Vendedor (ya no está en la lista)";
+    o.textContent = "Empleado (ya no está en la lista)";
     saleSeller.appendChild(o);
   }
   if (editingSaleId) {
@@ -3426,7 +3426,7 @@ const PAGE_TAB_COPY = {
   },
   configuraciones: {
     title: "Configuraciones",
-    subtitle: "Metas del negocio o vendedores: una sección por pantalla (elegí arriba)",
+    subtitle: "Metas del negocio o empleados: una sección por pantalla (elegí arriba)",
   },
   ayuda: {
     title: "Ayuda",
@@ -3756,6 +3756,7 @@ function getCarQueueOrders() {
         brand: sale.storage || "",
         vehicleModel: sale.battery || "",
         vehicleType: sale.imei || "",
+        sellerId: sale.sellerId || null,
         services: [],
         total: 0,
         paid: 0,
@@ -3774,7 +3775,14 @@ function getCarQueueOrders() {
     const st = normalizeSaleStatus(sale.status);
     if (SALE_STATUS_FLOW.indexOf(st) < SALE_STATUS_FLOW.indexOf(g.status)) g.status = st;
   });
-  return [...groups.values()];
+  const orders = [...groups.values()];
+  const sellers = getSellers();
+  orders.forEach((o) => {
+    o.sellerName = o.sellerId
+      ? sellers.find((sp) => String(sp.id) === String(o.sellerId))?.name || ""
+      : "";
+  });
+  return orders;
 }
 
 function orderIsPaid(order) {
@@ -3810,7 +3818,7 @@ function renderCarQueue() {
 
   listEl.innerHTML = "";
   if (visible.length === 0) {
-    listEl.innerHTML = `<p class="muted car-queue__empty">Sin autos en el lavadero. Registrá un ingreso con “Nueva venta / Ingreso”.</p>`;
+    listEl.innerHTML = `<p class="muted car-queue__empty">Sin autos en el lavadero. Cargá uno con el formulario “Ingresar auto”.</p>`;
     return;
   }
 
@@ -3844,6 +3852,7 @@ function renderCarQueue() {
       <div class="car-queue-card__vehicle muted">${escapeHtml(vehicleLine || "Vehículo sin datos")}</div>
       ${o.client && o.client !== o.plate ? `<div class="car-queue-card__client">${escapeHtml(o.client)}</div>` : ""}
       <div class="car-queue-card__services">${servicesLine || "—"}</div>
+      ${o.sellerName ? `<div class="car-queue-card__seller muted">Lava: <strong>${escapeHtml(o.sellerName)}</strong></div>` : ""}
       <div class="car-queue-card__foot">
         <span class="car-queue-card__total">${currency(o.total)}</span>
         ${isOldPending ? `<span class="car-queue-card__late">Ingresó el ${escapeHtml(o.date)}</span>` : ""}
@@ -3916,6 +3925,27 @@ function bindCarQueueUi() {
 
 let qcSelectedServiceId = null;
 
+function refreshQcSellerSelect() {
+  const sel = document.getElementById("qc-seller");
+  if (!sel) return;
+  const prev = sel.value;
+  const sellers = getSellers()
+    .filter((sp) => sp.active)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = "";
+  o0.textContent = "Sin asignar";
+  sel.appendChild(o0);
+  sellers.forEach((sp) => {
+    const o = document.createElement("option");
+    o.value = String(sp.id);
+    o.textContent = sp.name;
+    sel.appendChild(o);
+  });
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+}
+
 function renderQuickCheckinServices() {
   const wrap = document.getElementById("qc-service-options");
   if (!wrap) return;
@@ -3956,6 +3986,8 @@ async function saveQuickCheckin() {
 
   const price = numeric(service.price, 0);
   const cost = numeric(service.cost, 0);
+  const sellerSel = document.getElementById("qc-seller");
+  const comm = computeSaleCommission(sellerSel?.value || null, price);
   const orderId =
     typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `ord-${Date.now()}`;
 
@@ -3984,27 +4016,35 @@ async function saveQuickCheckin() {
         sale_total: price,
         cost_total: cost,
         profit: price - cost,
-        seller_id: null,
-        commission_pct_applied: null,
-        commission_amount: 0,
+        seller_id: comm.sellerId,
+        commission_pct_applied: comm.commissionPctApplied,
+        commission_amount: comm.commissionAmount,
         status: "en_proceso",
         order_id: orderId,
         finished_at: null,
       };
-      let { error } = await supabaseClient.from("sales").insert(payload);
+      let { data: insRow, error } = await supabaseClient
+        .from("sales")
+        .insert(payload)
+        .select("id")
+        .single();
       if (error && /schema cache|could not find/i.test(error.message || "")) {
         const { ig_handle: _a, status: _b, order_id: _c, finished_at: _d, ...legacy } = payload;
-        ({ error } = await supabaseClient.from("sales").insert(legacy));
+        ({ data: insRow, error } = await supabaseClient.from("sales").insert(legacy).select("id").single());
       }
       if (error) throw error;
+      if (insRow?.id) {
+        await syncCommissionCashFromSale(userId, insRow.id, date, plate, comm.commissionAmount, comm.sellerId);
+      }
     } catch (e) {
       alert(`No se pudo ingresar el auto: ${e?.message || e}`);
       return;
     }
   } else {
     const sales = readList(KEYS.sales);
+    const newSaleId = crypto.randomUUID();
     sales.unshift({
-      id: crypto.randomUUID(),
+      id: newSaleId,
       date,
       client: plate,
       phone: "",
@@ -4026,14 +4066,15 @@ async function saveQuickCheckin() {
       costTotal: cost,
       profit: price - cost,
       deductFromInventory: false,
-      sellerId: null,
-      commissionPctApplied: null,
-      commissionAmount: 0,
+      sellerId: comm.sellerId,
+      commissionPctApplied: comm.commissionPctApplied,
+      commissionAmount: comm.commissionAmount,
       status: "en_proceso",
       orderId,
       finishedAt: null,
     });
     writeList(KEYS.sales, sales);
+    await syncCommissionCashFromSale(null, newSaleId, date, plate, comm.commissionAmount, comm.sellerId);
   }
 
   if (brandEl) brandEl.value = "";
@@ -10678,6 +10719,7 @@ function renderAll() {
   renderSales();
   renderCarQueue();
   renderQuickCheckinServices();
+  refreshQcSellerSelect();
   renderSellersTable();
   renderSellerStats();
   refreshSaleSellerSelect();

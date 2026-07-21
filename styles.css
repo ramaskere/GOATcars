@@ -8838,3 +8838,7 @@ body.role-empleado #tab-ventas table td:nth-child(8) {
   opacity: 0.75;
   font-size: 13px;
 }
+
+.car-queue-card__seller {
+  font-size: 12px;
+}

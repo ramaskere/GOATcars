@@ -17,7 +17,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="icon" href="./assets/logo.png" type="image/png" />
     <link rel="stylesheet" href="./themes.css?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=5" />
+    <link rel="stylesheet" href="./styles.css?v=6" />
     <script>
       (function () {
         var map = {
@@ -259,7 +259,7 @@
               <section class="kpi-quad-section" aria-label="Reparto de la ganancia">
                 <h3 class="kpi-quad-heading kpi-quad-heading--reparto">Reparto de la ganancia</h3>
                 <p class="section-hint muted kpi-quad-hint">
-                  Sobre entradas del mes, <strong>después de restar comisiones de vendedores</strong>. En Caja elegís el destino de cada movimiento; «Reparto general» se divide según los %, el resto va directo al bucket.
+                  Sobre entradas del mes, <strong>después de restar comisiones de empleados</strong>. En Caja elegís el destino de cada movimiento; «Reparto general» se divide según los %, el resto va directo al bucket.
                 </p>
                 <div class="kpi-quad-body kpi-quad-body--stack">
                   <div class="kpi-quad-tiles kpi-quad-tiles--stack-3">
@@ -389,17 +389,17 @@
 
           <section class="card glass-panel resumen-best-sellers-card" aria-labelledby="resumen-best-sellers-title">
             <div class="stats-visual-head">
-              <h2 id="resumen-best-sellers-title" class="stats-visual-title">Mejores operarios / vendedores</h2>
+              <h2 id="resumen-best-sellers-title" class="stats-visual-title">Mejores empleados</h2>
             </div>
             <p class="section-hint">
-              Mismo <strong>mes que Período</strong>. Orden por <strong>ganancia</strong> (margen de ventas con vendedor asignado). Hasta 15 posiciones.
+              Mismo <strong>mes que Período</strong>. Orden por <strong>ganancia</strong> (margen de lavados con empleado asignado). Hasta 15 posiciones.
             </p>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>Vendedor</th>
+                    <th>Empleado</th>
                     <th>Ventas</th>
                     <th>Total vendido</th>
                     <th>Ganancia</th>
@@ -421,7 +421,7 @@
             </p>
             <ul class="intro-list">
               <li>
-                <strong>Ventas</strong>: cliente, operario/vendedor, datos del <strong>vehículo</strong> (patente, marca, tipo) y <strong>servicios</strong> del catálogo en el carrito. Registrá el pago en ARS (efectivo, transferencia, tarjeta u otro).
+                <strong>Ventas</strong>: cliente, empleado que lava, datos del <strong>vehículo</strong> (patente, marca, tipo) y <strong>servicios</strong> del catálogo en el carrito. Registrá el pago en ARS (efectivo, transferencia, tarjeta u otro).
               </li>
               <li>
                 <strong>Servicios</strong>: catálogo de lavados y detailing (nombre, precio, costo). Se usan al armar el carrito en Ventas.
@@ -439,7 +439,7 @@
                 <strong>Facturación</strong>: comprobantes ligados a ventas.
               </li>
               <li>
-                <strong>Configuraciones</strong>: metas del negocio (reparto Reserva / Insumos / Socios) y vendedores/operarios con comisión %.
+                <strong>Configuraciones</strong>: metas del negocio (reparto Reserva / Insumos / Socios) y empleados con comisión % por lavado.
               </li>
             </ul>
             <div class="support-box">
@@ -468,7 +468,6 @@
                 <h2 class="section-hero__title">Ventas</h2>
                 <p class="section-hero__subtitle muted">Ingresá autos, marcá cuándo terminan y cerrá la entrega</p>
               </div>
-              <button type="button" id="btn-open-sale-modal" class="ventas-btn-nueva">Nueva venta / Ingreso</button>
             </div>
             <div class="ventas-kpi-board" aria-live="polite">
               <div class="section-kpi-row section-kpi-row--ventas-hoy">
@@ -564,15 +563,15 @@
                     <input id="sale-ig" type="text" placeholder="@usuario (para vincular lead IG)" autocomplete="off" />
                   </label>
                   <label class="label-span-2">
-                    Vendedor
-                    <select id="sale-seller" aria-label="Vendedor de la venta">
-                      <option value="">Sin vendedor</option>
+                    Empleado
+                    <select id="sale-seller" aria-label="Empleado de la venta">
+                      <option value="">Sin asignar</option>
                     </select>
                   </label>
                 </div>
                 <p class="fieldset-hint muted">
                   La comisión se calcula sobre el <strong>monto cobrado</strong> de cada línea según el % definido en
-                  <strong>Configuraciones → Vendedores</strong>.
+                  <strong>Configuraciones → Empleados</strong>.
                 </p>
               </fieldset>
 
@@ -760,6 +759,12 @@
                   Patente
                   <input id="qc-plate" type="text" placeholder="Ej: AB123CD" required class="quick-checkin-plate" />
                 </label>
+                <label>
+                  ¿Quién lo lava?
+                  <select id="qc-seller">
+                    <option value="">Sin asignar</option>
+                  </select>
+                </label>
               </div>
               <div class="quick-checkin-services">
                 <span class="quick-checkin-services__label">Servicio</span>
@@ -830,7 +835,7 @@
                   <tr>
                     <th>Fecha</th>
                     <th>Cliente</th>
-                    <th>Vendedor</th>
+                    <th>Empleado</th>
                     <th>Servicio / vehículo</th>
                     <th>Cant.</th>
                     <th>Venta</th>
@@ -1337,7 +1342,7 @@
               aria-controls="config-panel-vendedores"
               aria-selected="false"
             >
-              Vendedores
+              Empleados
             </button>
           </nav>
 
@@ -1374,8 +1379,8 @@
             </div>
             <h3 class="goals-subtitle">Reparto de la ganancia</h3>
             <p class="section-hint goals-hint goals-hint--split">
-              Las <strong>ventas</strong> y los ingresos de Caja marcados como <strong>Reparto general</strong> forman la base (menos comisiones de vendedores) y se reparten según los %.
-              Ingresos/egresos con destino fijo (<strong>Reserva</strong>, <strong>Insumos</strong> o <strong>Socios</strong>) van directo a ese bucket. Las comisiones de vendedores no se descuentan dos veces.
+              Las <strong>ventas</strong> y los ingresos de Caja marcados como <strong>Reparto general</strong> forman la base (menos comisiones de empleados) y se reparten según los %.
+              Ingresos/egresos con destino fijo (<strong>Reserva</strong>, <strong>Insumos</strong> o <strong>Socios</strong>) van directo a ese bucket. Las comisiones de empleados no se descuentan dos veces.
               <strong>Reserva + Insumos + Socios</strong> deben sumar 100; si no, se normalizan al guardar.
             </p>
             <div class="goals-inputs grid goals-split-grid">
@@ -1425,7 +1430,7 @@
             hidden
           >
             <section class="card">
-              <h2>Vendedores</h2>
+              <h2>Empleados</h2>
               <p class="section-hint">
                 Definí el <strong>% de comisión sobre lo que entró</strong> en cada venta (monto neto cobrado por línea). Al registrar una venta elegís quién vendió; acá ves totales y comisiones por período.
               </p>
@@ -1433,7 +1438,7 @@
                 <strong>Supabase:</strong> tiene que existir la tabla <code>salespeople</code> (y columnas en <code>sales</code>). Si ves «Could not find the table…», en el panel de Supabase → <strong>SQL</strong> ejecutá el archivo
                 <code>CRM/supabase/migration_sales_sellers.sql</code> del proyecto y recargá la app.
               </p>
-              <p id="seller-edit-hint" class="section-hint muted" hidden>Editando vendedor — guardá los cambios o cancelá la edición.</p>
+              <p id="seller-edit-hint" class="section-hint muted" hidden>Editando empleado — guardá los cambios o cancelá la edición.</p>
               <form id="seller-form" class="grid">
                 <label>
                   Nombre
@@ -1448,7 +1453,7 @@
                   Activo (aparece al cargar ventas nuevas)
                 </label>
                 <div class="form-actions form-actions--inline label-span-2">
-                  <button type="submit" id="seller-form-submit-btn">Agregar vendedor</button>
+                  <button type="submit" id="seller-form-submit-btn">Agregar empleado</button>
                   <button type="button" class="secondary" id="btn-seller-cancel-edit" hidden>Cancelar edición</button>
                 </div>
               </form>
@@ -1475,7 +1480,7 @@
 
             <section class="card">
               <div class="table-head table-head--filters">
-                <h2>Resultados por vendedor</h2>
+                <h2>Resultados por empleado</h2>
                 <div class="table-head-actions">
                   <button type="button" class="secondary" id="btn-mark-comm-paid">Marcar comisiones pagadas</button>
                   <button type="button" class="secondary" id="btn-recalc-comm">Recalcular comisiones</button>
@@ -1483,7 +1488,7 @@
               </div>
               <p class="section-hint muted">
                 Usa el <strong>Período</strong> del encabezado (mismo mes que Resumen). Filtra por <strong>fecha de venta</strong>. Las
-                <strong>comisiones</strong> usan el <strong>% actual</strong> del vendedor sobre el <strong>monto que entró</strong> de
+                <strong>comisiones</strong> usan el <strong>% actual</strong> del empleado sobre el <strong>monto que entró</strong> de
                 cada línea (neto cobrado, de cada venta).
               </p>
               <select id="vendedores-stats-month" hidden aria-hidden="true" tabindex="-1"></select>
@@ -1491,7 +1496,7 @@
                 <table>
                   <thead>
                     <tr>
-                      <th>Vendedor</th>
+                      <th>Empleado</th>
                       <th>Ventas (#)</th>
                       <th>Total vendido</th>
                       <th>Resultado</th>
@@ -1844,7 +1849,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="./config.js?v=1"></script>
-    <script src="./app.js?v=4"></script>
+    <script src="./app.js?v=5"></script>
     <script src="./business-extras.js?v=1"></script>
   </body>
 </html>
