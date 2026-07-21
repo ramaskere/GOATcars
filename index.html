@@ -1,0 +1,1733 @@
+<!doctype html>
+<html lang="es" data-theme="goat">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="GOAT CARWASH — CRM de lavadero: ventas, caja, servicios y pipeline."
+    />
+    <meta name="theme-color" content="#000000" id="meta-theme-color" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>GOAT CARWASH · CRM</title>
+    <!-- ?v= rompe caché del navegador al cambiar estilos; subí el número si no ves cambios -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
+    <link rel="icon" href="./assets/logo.png" type="image/png" />
+    <link rel="stylesheet" href="./themes.css?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=2" />
+    <script>
+      (function () {
+        var map = {
+          goat: "#000000",
+          oceano: "#1e3a5f",
+          bosque: "#134e4a",
+          magma: "#7c2d12",
+          uva: "#4c1d95",
+          grafito: "#1e293b",
+        };
+        var allowed = ["goat", "oceano", "bosque", "magma", "uva", "grafito"];
+        var stored = null;
+        try {
+          stored = localStorage.getItem("goatcars_ui_theme");
+        } catch (e) {}
+        var t =
+          allowed.indexOf(stored) >= 0
+            ? stored
+            : document.documentElement.getAttribute("data-theme") || "goat";
+        if (allowed.indexOf(t) < 0) t = "goat";
+        document.documentElement.setAttribute("data-theme", t);
+        var m = document.getElementById("meta-theme-color");
+        if (m) m.setAttribute("content", map[t] || map.goat);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="auth-overlay" class="auth-overlay" hidden>
+      <div class="auth-card card glass-panel">
+        <div class="auth-brand-block">
+          <img class="auth-logo" src="./assets/logo.png" alt="GOAT CARWASH" width="120" height="120" />
+          <p class="auth-brand">GOAT CARWASH</p>
+        </div>
+        <h1 class="auth-title">Iniciar sesión</h1>
+        <p class="auth-lead muted">CRM lavadero · mismo usuario que en Supabase → Authentication → Users.</p>
+        <p id="auth-status" class="auth-status muted" aria-live="polite"></p>
+        <form id="auth-login-form" class="auth-form" autocomplete="on">
+          <label class="auth-field">
+            Email
+            <input id="auth-email" type="email" name="email" autocomplete="username" required placeholder="tu@email.com" />
+          </label>
+          <label class="auth-field">
+            Contraseña
+            <input id="auth-password" type="password" name="password" autocomplete="current-password" required />
+          </label>
+          <p id="auth-error" class="auth-error" role="alert" hidden></p>
+          <button type="submit" class="auth-submit">Entrar</button>
+        </form>
+        <p class="auth-alt muted">¿Sin cuenta de email en este proyecto?</p>
+        <button type="button" id="auth-anon-btn" class="secondary auth-anon-btn">Entrar como invitado (anónimo)</button>
+        <p class="auth-alt muted">¿Solo probás sin nube?</p>
+        <button type="button" id="auth-local-btn" class="secondary auth-local-btn">Usar solo este navegador</button>
+        <div class="auth-theme-row">
+          <label class="auth-theme-label" for="theme-select-auth">Colores de la app</label>
+          <select
+            id="theme-select-auth"
+            class="theme-select theme-select--auth dashboard-month-select--minimal dashboard-month-select--on-light"
+            data-theme-select
+            autocomplete="off"
+          >
+            <option value="goat">GOAT (marca)</option>
+            <option value="oceano">Océano (azul)</option>
+            <option value="bosque">Bosque (verde)</option>
+            <option value="magma">Magma (cálido)</option>
+            <option value="uva">Uva (violeta)</option>
+            <option value="grafito">Grafito (neutro)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="app-shell" class="app-layout">
+      <aside class="sidebar" aria-label="Navegación principal">
+        <div class="sidebar-brand">
+          <img class="sidebar-brand-logo" src="./assets/logo.png" alt="" width="56" height="56" />
+          <div class="sidebar-brand-text">
+            <span class="sidebar-brand-title">GOAT CARWASH</span>
+            <span class="sidebar-brand-sub">CRM · lavadero</span>
+          </div>
+        </div>
+        <nav class="sidebar-nav" aria-label="Secciones principales">
+          <button type="button" class="tab-btn active" data-tab="resumen">Resumen</button>
+          <button type="button" class="tab-btn" data-tab="caja">Caja</button>
+          <button type="button" class="tab-btn" data-tab="ventas">Ventas</button>
+          <button type="button" class="tab-btn" data-tab="servicios">Servicios</button>
+          <button type="button" class="tab-btn" data-tab="pipeline">Pipeline</button>
+          <button type="button" class="tab-btn" data-tab="deudores">Deudores</button>
+          <button type="button" class="tab-btn" data-tab="facturacion">Facturación</button>
+          <button type="button" class="tab-btn" data-tab="configuraciones">Configuraciones</button>
+          <div class="sidebar-nav-spacer" aria-hidden="true"></div>
+          <button type="button" class="tab-btn tab-btn--support" data-tab="ayuda">Ayuda</button>
+        </nav>
+      </aside>
+
+      <div class="main-column">
+        <header class="main-header">
+          <div class="main-header-top">
+            <div class="main-header-left">
+              <h1 id="main-page-title" class="page-title">Resumen</h1>
+              <p id="main-page-subtitle" class="page-subtitle">
+                Ventas de servicios, caja y pipeline del lavadero
+              </p>
+            </div>
+            <div class="main-header-toolbar header-toolbar-icons" role="toolbar" aria-label="Acciones rápidas">
+              <button type="button" id="btn-header-refresh" class="header-icon-btn" title="Actualizar" aria-label="Actualizar datos">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                  <path d="M3 21v-5h5" />
+                  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                  <path d="M21 3v5h-5" />
+                </svg>
+              </button>
+              <div
+                id="connection-status"
+                class="header-icon-btn header-icon-btn--status connection-pill--local"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                title=""
+              >
+                <span class="header-icon-btn__dot" aria-hidden="true"></span>
+                <span id="connection-status-lead" class="sr-only"></span>
+                <span id="connection-status-detail" class="sr-only"></span>
+              </div>
+              <button type="button" id="btn-user-meta" class="header-icon-btn" hidden title="" aria-label="Usuario / copiar ID">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </button>
+              <label class="header-icon-btn header-icon-btn--theme" title="Tema">
+                <span class="sr-only">Tema de color</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+                  <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+                  <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+                  <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+                  <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
+                </svg>
+                <select
+                  id="theme-select"
+                  class="header-theme-select-overlay dashboard-month-select--minimal"
+                  data-theme-select
+                  autocomplete="off"
+                >
+                  <option value="goat">GOAT</option>
+                  <option value="oceano">Océano</option>
+                  <option value="bosque">Bosque</option>
+                  <option value="magma">Magma</option>
+                  <option value="uva">Uva</option>
+                  <option value="grafito">Grafito</option>
+                </select>
+              </label>
+              <button type="button" id="btn-logout-supabase" class="header-icon-btn" hidden title="Cerrar sesión" aria-label="Cerrar sesión nube">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+              </button>
+              <div class="header-toolbar-clock" title="Hora local" aria-live="polite">
+                <span class="header-clock-dot" aria-hidden="true"></span>
+                <span id="header-clock" class="header-clock"></span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div id="app-period-bar" class="app-period-bar app-period-bar--under-header">
+          <div class="app-period-bar-inner">
+            <span class="app-period-bar-kicker">Período</span>
+            <label class="app-period-bar-label" for="dashboard-month">
+              <select
+                id="dashboard-month"
+                class="dashboard-month-select--minimal dashboard-month-select--on-light app-period-select"
+                aria-describedby="dashboard-period-hint"
+              ></select>
+            </label>
+            <p id="app-period-bar-note" class="app-period-bar-note muted" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <!-- Resumen -->
+        <section class="tab-panel active" id="tab-resumen" aria-label="Resumen del negocio">
+          <section class="card glass-panel resumen-alerts-card resumen-alerts-card--collapsed" id="resumen-alerts-panel" aria-labelledby="resumen-alerts-title">
+            <button type="button" id="resumen-alerts-toggle" class="resumen-alerts-toggle" aria-expanded="false" aria-controls="resumen-alerts-body" hidden>
+              <div class="resumen-alerts-toggle__main">
+                <h2 id="resumen-alerts-title" class="resumen-alerts-title">Alertas</h2>
+                <p id="resumen-alerts-summary" class="resumen-alerts-summary muted"></p>
+              </div>
+              <span id="resumen-alerts-count" class="resumen-alerts-count" hidden aria-live="polite">0</span>
+              <span class="resumen-alerts-chevron" aria-hidden="true"></span>
+            </button>
+            <div id="resumen-alerts-body" class="resumen-alerts-body" hidden>
+              <p class="section-hint muted resumen-alerts-hint">Desplegá cada tipo para ver casos. Tocá un caso para ir directo, o <strong>Ver todos</strong> para la sección completa.</p>
+              <div id="resumen-alerts-empty" class="resumen-alerts-empty">
+                <span class="resumen-alerts-empty__icon" aria-hidden="true">✓</span>
+                <p>Todo en orden — sin alertas por ahora.</p>
+              </div>
+              <div id="resumen-alerts-list" class="resumen-alerts-list" role="list"></div>
+            </div>
+          </section>
+          <div class="kpi-dashboard">
+            <p id="dashboard-period-hint" class="sr-only">
+              El período elegido arriba filtra listas, KPIs y reparto en todas las secciones del CRM (salvo que actives «Ver todos los meses» en cada vista).
+            </p>
+            <div class="dashboard-board-panel kpi-quad-board totals--dashboard">
+              <div class="metrics-header">
+                <h2 class="metrics-title">Métricas del negocio</h2>
+              </div>
+
+              <section class="kpi-quad-section" aria-label="Flujo del mes">
+                <h3 class="kpi-quad-heading kpi-quad-heading--flujo">Flujo del mes</h3>
+                <div class="kpi-quad-body kpi-quad-body--stack">
+                  <div class="kpi-quad-tiles kpi-quad-tiles--stack-4">
+                    <article class="card stat glass-stat stat--kpi">
+                      <h3 class="stat-title">Ingresos</h3>
+                      <p id="kpi-entra" class="stat-num">$0.00</p>
+                    </article>
+                    <article class="card stat glass-stat stat--kpi">
+                      <h3 class="stat-title">Egresos</h3>
+                      <p id="kpi-sale" class="stat-num">$0.00</p>
+                    </article>
+                    <article class="card stat glass-stat stat--kpi">
+                      <h3 class="stat-title">Ganancias</h3>
+                      <p id="kpi-ganancia" class="stat-num">$0.00</p>
+                    </article>
+                    <article class="card stat glass-stat stat--kpi">
+                      <h3 class="stat-title">Ventas</h3>
+                      <p id="kpi-ventas" class="stat-num">$0.00</p>
+                    </article>
+                  </div>
+                </div>
+              </section>
+
+              <section class="kpi-quad-section" aria-label="Reparto de la ganancia">
+                <h3 class="kpi-quad-heading kpi-quad-heading--reparto">Reparto de la ganancia</h3>
+                <p class="section-hint muted kpi-quad-hint">
+                  Sobre entradas del mes, <strong>después de restar comisiones de vendedores</strong>. En Caja elegís el destino de cada movimiento; «Reparto general» se divide según los %, el resto va directo al bucket.
+                </p>
+                <div class="kpi-quad-body kpi-quad-body--stack">
+                  <div class="kpi-quad-tiles kpi-quad-tiles--stack-3">
+                    <article
+                      class="card stat glass-stat stat--kpi stat--split"
+                      title="Mismo % que Insumos (%) en Metas — Reserva + Insumos + Socios = 100%."
+                    >
+                      <h3 class="stat-title">Insumos <span class="stat-pct" id="kpi-pct-restock">0%</span></h3>
+                      <p id="kpi-restock" class="stat-num">$0.00</p>
+                    </article>
+                    <article class="card stat glass-stat stat--kpi stat--split" title="Mismo % que Reserva (%) en Metas del negocio.">
+                      <h3 class="stat-title">Reserva <span class="stat-pct" id="kpi-pct-reserva">30%</span></h3>
+                      <p id="kpi-reserva" class="stat-num">$0.00</p>
+                    </article>
+                    <article class="card stat glass-stat stat--kpi stat--split" title="Mismo % que Socios (%) en Metas del negocio.">
+                      <h3 class="stat-title">Socios <span class="stat-pct" id="kpi-pct-socios">20%</span></h3>
+                      <p id="kpi-socios" class="stat-num">$0.00</p>
+                    </article>
+                  </div>
+                </div>
+              </section>
+
+              <section class="kpi-quad-section" aria-label="Servicios del catálogo">
+                <h3 class="kpi-quad-heading kpi-quad-heading--inventario">Servicios</h3>
+                <div class="kpi-quad-body kpi-quad-body--stack">
+                  <div class="kpi-quad-tiles kpi-quad-tiles--stack-2">
+                    <article class="card stat glass-stat stat--kpi" title="Servicios activos en el catálogo">
+                      <h3 class="stat-title">Servicios activos</h3>
+                      <p id="kpi-stock" class="stat-num">0</p>
+                    </article>
+                    <article class="card stat glass-stat stat--kpi" title="Precio promedio de servicios activos">
+                      <h3 class="stat-title">Precio promedio</h3>
+                      <p id="kpi-stock-value" class="stat-num">$0.00</p>
+                    </article>
+                  </div>
+                </div>
+              </section>
+
+              <section class="kpi-quad-section" aria-label="Seguimiento">
+                <h3 class="kpi-quad-heading kpi-quad-heading--seguimiento">Seguimiento</h3>
+                <div class="kpi-quad-body kpi-quad-body--stack">
+                  <div class="kpi-quad-tiles kpi-quad-tiles--stack-2">
+                    <article class="card stat glass-stat stat--kpi">
+                      <h3 class="stat-title">Servicios mes</h3>
+                      <p id="kpi-warranty-active" class="stat-num">0</p>
+                    </article>
+                    <article class="card stat glass-stat stat--kpi" title="Suma de pendientes de la lista en la pestaña Deudores">
+                      <h3 class="stat-title">Cuotas por cobrar</h3>
+                      <p id="kpi-cuotas-cobrar" class="stat-num">$0.00</p>
+                    </article>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <section class="card stats-visual-card glass-panel">
+            <div class="stats-visual-head">
+              <h2 class="stats-visual-title">Estadísticas</h2>
+            </div>
+            <p class="section-hint">
+              Comparación del <strong>mes del período</strong> vs el mes anterior. El gráfico y el top de servicios son del mismo mes elegido en Período.
+            </p>
+
+            <div class="stats-compare-grid">
+              <div class="stats-compare-block">
+                <h3 class="stats-subtitle">Dinero que entró (USD)</h3>
+                <p class="stats-compare-hint muted">Facturación de ventas + ingresos de caja del mes.</p>
+                <div class="compare-two">
+                  <div class="compare-pill">
+                    <span class="compare-label" id="stat-label-current">Mes actual</span>
+                    <strong id="stat-sales-current">$0.00</strong>
+                  </div>
+                  <div class="compare-pill compare-pill--muted">
+                    <span class="compare-label" id="stat-label-prev">Mes pasado</span>
+                    <strong id="stat-sales-prev">$0.00</strong>
+                  </div>
+                </div>
+                <div class="compare-bar-wrap" aria-hidden="true">
+                  <div class="compare-bar-track">
+                    <div class="compare-bar-fill compare-bar-fill--now" id="stat-sales-bar-current"></div>
+                  </div>
+                  <div class="compare-bar-track">
+                    <div class="compare-bar-fill compare-bar-fill--past" id="stat-sales-bar-prev"></div>
+                  </div>
+                </div>
+                <p class="stats-delta" id="stat-sales-delta"></p>
+              </div>
+              <div class="stats-compare-block">
+                <h3 class="stats-subtitle">Resultado del mes (USD)</h3>
+                <p class="stats-compare-hint muted">Ingresos del mes (ventas + caja) − egresos de caja del mismo mes.</p>
+                <div class="compare-two">
+                  <div class="compare-pill">
+                    <span class="compare-label" id="stat-label-profit-focus">—</span>
+                    <strong id="stat-profit-current">$0.00</strong>
+                  </div>
+                  <div class="compare-pill compare-pill--muted">
+                    <span class="compare-label" id="stat-label-profit-prev">—</span>
+                    <strong id="stat-profit-prev">$0.00</strong>
+                  </div>
+                </div>
+                <p class="stats-delta" id="stat-profit-delta"></p>
+              </div>
+            </div>
+
+            <div class="stats-chart-block">
+              <div class="stats-chart-toolbar">
+                <div>
+                  <h3 class="stats-subtitle">Entradas por día</h3>
+                  <p class="stats-chart-hint muted">
+                    Mismo mes que <strong>Período</strong> (selector debajo de los iconos). Suma del día: <strong>ventas</strong> + <strong>ingresos de caja</strong>.
+                    <strong>Pasá el mouse</strong> sobre cada barra para ver cuánto entró ese día.
+                  </p>
+                </div>
+              </div>
+              <div id="stats-daily-chart" class="stats-daily-chart" role="img" aria-label="Gráfico de ventas por día"></div>
+              <p class="stats-chart-caption muted" id="stats-chart-caption"></p>
+            </div>
+
+            <div class="stats-top-block">
+              <h3 class="stats-subtitle">
+                Top servicios <span class="muted">(unidades en el mes)</span>
+              </h3>
+              <div id="stats-top-models" class="stats-top-models"></div>
+            </div>
+          </section>
+
+          <section class="card glass-panel resumen-best-sellers-card" aria-labelledby="resumen-best-sellers-title">
+            <div class="stats-visual-head">
+              <h2 id="resumen-best-sellers-title" class="stats-visual-title">Mejores operarios / vendedores</h2>
+            </div>
+            <p class="section-hint">
+              Mismo <strong>mes que Período</strong>. Orden por <strong>ganancia</strong> (margen de ventas con vendedor asignado). Hasta 15 posiciones.
+            </p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Vendedor</th>
+                    <th>Ventas</th>
+                    <th>Total vendido</th>
+                    <th>Ganancia</th>
+                    <th>Comisiones</th>
+                  </tr>
+                </thead>
+                <tbody id="resumen-best-sellers-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- Ayuda y soporte -->
+        <section class="tab-panel" id="tab-ayuda" aria-label="Ayuda y soporte">
+          <section class="card glass-panel help-card">
+            <h2 class="help-title">Cómo usar GOAT CARWASH</h2>
+            <p class="section-hint help-lead">
+              Guía rápida del CRM de lavadero. Con <code>config.js</code> (URL y anon key) al abrir ves el <strong>inicio de sesión</strong>; después, ventas, caja y servicios van a <strong>Supabase</strong> con actualización en vivo (Realtime).
+            </p>
+            <ul class="intro-list">
+              <li>
+                <strong>Ventas</strong>: cliente, operario/vendedor, datos del <strong>vehículo</strong> (patente, marca, tipo) y <strong>servicios</strong> del catálogo en el carrito. Registrá el pago en ARS (efectivo, transferencia, tarjeta u otro).
+              </li>
+              <li>
+                <strong>Servicios</strong>: catálogo de lavados y detailing (nombre, precio, costo). Se usan al armar el carrito en Ventas.
+              </li>
+              <li>
+                <strong>Caja</strong>: ingresos y egresos que no son una venta (alquiler, insumos, sueldos). Cada movimiento tiene destino de reparto (general, Reserva, Insumos o Socios).
+              </li>
+              <li>
+                <strong>Pipeline</strong>: tablero Kanban de leads; arrastrá tarjetas entre etapas o creá un lead manual.
+              </li>
+              <li>
+                <strong>Deudores</strong>: cobros pendientes (cuotas, tarjetas que liquidan después).
+              </li>
+              <li>
+                <strong>Facturación</strong>: comprobantes ligados a ventas.
+              </li>
+              <li>
+                <strong>Configuraciones</strong>: metas del negocio (reparto Reserva / Insumos / Socios) y vendedores/operarios con comisión %.
+              </li>
+            </ul>
+            <div class="support-box">
+              <h3 class="support-title">Soporte y datos</h3>
+              <p>
+                Si importás datos con SQL en Supabase, el <strong>user_id</strong> debe ser el mismo que muestra la app en el encabezado (botón Copiar). Si ves $0 en la app pero sí hay filas en la tabla, revisá que coincidan los usuarios.
+              </p>
+              <p>
+                Si el indicador dice que no hay conexión a la base, completá <code>APP_SUPABASE_EMAIL</code> y <code>APP_SUPABASE_PASSWORD</code> en <code>config.js</code> (usuario de Authentication) y recargá. Si ves listas vacías pero en el Table Editor hay filas, revisá que el <code>user_id</code> de esas filas sea el UUID que muestra la app (Copiar).
+              </p>
+              <p>
+                El selector <strong>Período</strong> (arriba) filtra en <strong>Resumen</strong> los KPIs y gráficos, y en <strong>Configuraciones → Metas</strong> la comparación con tus metas. Si elegís un mes sin movimientos, vas a ver ceros aunque la nube esté bien.
+              </p>
+              <p class="muted support-foot">
+                GOAT CARWASH · lectura en vivo con Realtime (activá las tablas en Supabase → Database → Publications).
+              </p>
+            </div>
+          </section>
+        </section>
+
+        <!-- Ventas -->
+        <section class="tab-panel" id="tab-ventas" aria-label="Ventas">
+          <header class="section-hero card glass-panel">
+            <div class="section-hero__head">
+              <div>
+                <h2 class="section-hero__title">Ventas</h2>
+                <p class="section-hero__subtitle muted">Registrá y controlá tus operaciones</p>
+              </div>
+              <button type="button" id="btn-open-sale-modal" class="ventas-btn-nueva">Nueva venta</button>
+            </div>
+            <div class="ventas-kpi-board" aria-live="polite">
+              <div class="section-kpi-row section-kpi-row--ventas-basic">
+                <article class="section-kpi">
+                  <span class="section-kpi__label">Ventas del mes</span>
+                  <strong id="ventas-kpi-total" class="section-kpi__value">0</strong>
+                  <span class="section-kpi__hint muted">operaciones</span>
+                </article>
+                <article class="section-kpi">
+                  <span class="section-kpi__label">Cobrado</span>
+                  <strong id="ventas-kpi-revenue" class="section-kpi__value">$0.00</strong>
+                  <span class="section-kpi__hint muted">ARS neto del mes</span>
+                </article>
+                <article class="section-kpi">
+                  <span class="section-kpi__label">Servicios</span>
+                  <strong id="ventas-kpi-units" class="section-kpi__value">0</strong>
+                  <span class="section-kpi__hint muted">líneas del mes</span>
+                </article>
+              </div>
+              <article class="ventas-resultado-card" id="ventas-resultado-card">
+                <div class="ventas-resultado-card__main">
+                  <div class="ventas-resultado-card__head">
+                    <span class="ventas-resultado-card__label">Resultado del mes</span>
+                    <span id="ventas-kpi-profit-hint" class="ventas-resultado-card__hint muted">cobrado − costo</span>
+                  </div>
+                  <strong id="ventas-kpi-profit" class="ventas-resultado-card__value">$0.00</strong>
+                </div>
+                <div class="ventas-resultado-breakdown" id="ventas-resultado-breakdown" hidden></div>
+              </article>
+            </div>
+          </header>
+
+          <div
+            id="sale-modal"
+            class="sale-modal"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sale-modal-title"
+            aria-hidden="true"
+          >
+            <div class="sale-modal__backdrop" id="sale-modal-backdrop" aria-hidden="true"></div>
+            <div class="sale-modal__panel card glass-panel" role="document">
+              <div class="sale-modal__header">
+                <h2 id="sale-modal-title">Nueva venta</h2>
+                <button type="button" class="sale-modal__close" id="sale-modal-close" aria-label="Cerrar">×</button>
+              </div>
+              <div class="sale-modal__scroll">
+                <p id="sale-edit-hint" class="fieldset-hint muted" hidden>
+                  Editando esta venta: al guardar se actualizan servicio, vehículo y cobros.
+                </p>
+            <form id="sale-form" class="sale-form" novalidate>
+              <fieldset class="form-fieldset">
+                <legend>Cliente y fecha</legend>
+                <div class="grid">
+                  <label>
+                    Fecha
+                    <input id="sale-date" type="date" required />
+                  </label>
+                  <label class="label-span-2">
+                    Cliente
+                    <select id="sale-client-select" aria-label="Elegir cliente o nuevo">
+                      <option value="__new__">Nuevo cliente…</option>
+                    </select>
+                  </label>
+                  <label>
+                    Nombre
+                    <input id="sale-client" type="text" placeholder="Nombre y apellido" required autocomplete="name" />
+                  </label>
+                  <label>
+                    Teléfono
+                    <input id="sale-phone" type="tel" placeholder="Opcional" autocomplete="tel" />
+                  </label>
+                  <label>
+                    Instagram
+                    <input id="sale-ig" type="text" placeholder="@usuario (para vincular lead IG)" autocomplete="off" />
+                  </label>
+                  <label class="label-span-2">
+                    Vendedor
+                    <select id="sale-seller" aria-label="Vendedor de la venta">
+                      <option value="">Sin vendedor</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="fieldset-hint muted">
+                  La comisión se calcula sobre el <strong>monto cobrado</strong> de cada línea según el % definido en
+                  <strong>Configuraciones → Vendedores</strong>.
+                </p>
+              </fieldset>
+
+              <fieldset class="form-fieldset">
+                <legend>Vehículo</legend>
+                <p class="fieldset-hint">Datos del auto que entra al lavadero.</p>
+                <div class="grid">
+                  <label>
+                    Patente
+                    <input id="sale-color" type="text" placeholder="Ej: AB123CD" autocomplete="off" style="text-transform:uppercase" />
+                  </label>
+                  <label>
+                    Marca
+                    <input id="sale-storage" type="text" placeholder="Ej: Toyota" autocomplete="off" />
+                  </label>
+                  <label>
+                    Modelo vehículo
+                    <input id="sale-battery" type="text" placeholder="Ej: Corolla" autocomplete="off" />
+                  </label>
+                  <label>
+                    Tipo
+                    <select id="sale-imei" aria-label="Tipo de vehículo">
+                      <option value="">— Elegir —</option>
+                      <option value="auto">Auto</option>
+                      <option value="suv">SUV / Camioneta</option>
+                      <option value="pickup">Pickup</option>
+                      <option value="moto">Moto</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset class="form-fieldset">
+                <legend>Agregar servicio al carrito</legend>
+                <p class="fieldset-hint">Elegí del catálogo o cargá el nombre a mano.</p>
+                <div class="grid">
+                  <label class="label-span-2">
+                    Elegir del catálogo
+                    <select id="sale-pick-inventory" aria-label="Elegir servicio del catálogo">
+                      <option value="">— Manual / sin elegir —</option>
+                    </select>
+                  </label>
+                  <label class="label-span-2">
+                    Servicio
+                    <input id="sale-model" type="text" placeholder="Ej: Lavado full" />
+                  </label>
+                  <label>
+                    Cantidad
+                    <input id="sale-quantity" type="number" min="1" step="1" value="1" />
+                  </label>
+                  <label>
+                    Precio unitario (ARS)
+                    <input id="sale-price" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>
+                    Costo unitario (ARS)
+                    <input id="sale-cost" type="number" min="0" step="0.01" placeholder="Opcional" />
+                  </label>
+                </div>
+                <div class="sale-cart-actions">
+                  <button type="button" id="sale-add-cart-btn" class="secondary">Agregar al carrito</button>
+                </div>
+              </fieldset>
+
+              <fieldset class="form-fieldset sale-cart-fieldset">
+                <legend>Carrito</legend>
+                <div id="sale-cart-empty" class="sale-cart-empty muted">
+                  Todavía no hay servicios. Agregá uno al carrito para continuar.
+                </div>
+                <div class="table-wrap sale-cart-table-wrap" hidden id="sale-cart-table-wrap">
+                  <table class="sale-cart-table">
+                    <thead>
+                      <tr>
+                        <th>Servicio</th>
+                        <th>Cant.</th>
+                        <th>P. unit.</th>
+                        <th>Subtotal</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="sale-cart-body"></tbody>
+                  </table>
+                </div>
+                <p class="sale-cart-toolbar">
+                  <button type="button" id="sale-cart-clear-btn" class="secondary sale-cart-clear" hidden>
+                    Vaciar carrito
+                  </button>
+                </p>
+              </fieldset>
+
+              <!-- trade-in disabled for lavadero; hidden stubs keep JS stable -->
+              <div hidden aria-hidden="true">
+                <textarea id="sale-trade-in-desc"></textarea>
+                <input id="sale-trade-in-value" type="number" value="0" />
+                <input id="sale-trade-in-model" type="text" />
+                <input id="sale-trade-in-color" type="text" />
+                <input id="sale-trade-in-storage" type="text" />
+                <input id="sale-trade-in-battery" type="number" value="0" />
+                <input id="sale-trade-in-inv-price" type="number" value="0" />
+              </div>
+
+              <div class="sale-checkout-summary card glass-panel" id="sale-checkout-summary">
+                <h3 class="sale-checkout-title">Resumen para el cliente</h3>
+                <div class="sale-checkout-rows">
+                  <div class="sale-checkout-row">
+                    <span>Subtotal ítems</span>
+                    <span id="sale-summary-gross">$0.00</span>
+                  </div>
+                  <div class="sale-checkout-row sale-checkout-row--deduct" hidden>
+                    <span>Descuento</span>
+                    <span id="sale-summary-trade">−$0.00</span>
+                  </div>
+                  <div class="sale-checkout-row sale-checkout-row--total">
+                    <span>Total a pagar</span>
+                    <strong id="sale-summary-net">$0.00</strong>
+                  </div>
+                </div>
+              </div>
+
+              <fieldset class="form-fieldset">
+                <legend>Formas de pago (ARS)</legend>
+                <p class="fieldset-hint">Completá lo que corresponda; puede ser varios medios a la vez.</p>
+                <div class="grid">
+                  <label>
+                    Efectivo
+                    <input id="sale-pay-cash" type="number" min="0" step="0.01" value="0" />
+                  </label>
+                  <label>
+                    Transferencia
+                    <input id="sale-pay-transfer" type="number" min="0" step="0.01" value="0" />
+                  </label>
+                  <label>
+                    Tarjeta (débito/crédito)
+                    <input id="sale-pay-card" type="number" min="0" step="0.01" value="0" />
+                  </label>
+                  <label>
+                    Otro (Mercado Pago, etc.)
+                    <input id="sale-pay-other" type="number" min="0" step="0.01" value="0" />
+                  </label>
+                  <label class="label-span-2">
+                    Notas de pago / detalle
+                    <input id="sale-payment" type="text" placeholder="Ej: 3 cuotas sin interés, referencia transferencia…" />
+                  </label>
+                </div>
+              </fieldset>
+
+              <div class="form-actions sale-modal__form-actions">
+                <button type="button" class="secondary" id="sale-modal-cancel">Cancelar</button>
+                <button type="submit" id="sale-form-submit-btn">Guardar venta</button>
+              </div>
+            </form>
+              </div>
+            </div>
+          </div>
+
+          <section class="card">
+            <div class="table-head table-head--filters">
+              <h2>Historial de ventas</h2>
+              <button type="button" class="secondary" id="btn-export-sales-csv">Exportar CSV</button>
+            </div>
+            <div class="view-filter-bar" data-view-filter="sales">
+              <span class="view-filter-period view-filter-period--month">Mes: <strong data-view-period-label></strong></span>
+              <label class="view-filter-label">
+                Buscar
+                <input id="sales-filter-q" type="search" placeholder="Cliente, servicio, patente…" autocomplete="off" />
+              </label>
+              <label class="view-filter-check">
+                <input id="sales-filter-all-months" type="checkbox" />
+                Ver todos los meses
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Vendedor</th>
+                    <th>Servicio / vehículo</th>
+                    <th>Cant.</th>
+                    <th>Venta</th>
+                    <th>Pago</th>
+                    <th>Resultado</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="sales-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+
+        <!-- Servicios (catálogo) -->
+        <section class="tab-panel" id="tab-servicios" aria-label="Catálogo de servicios">
+          <header class="section-hero card glass-panel">
+            <div class="section-hero__head">
+              <div>
+                <h2 class="section-hero__title">Servicios</h2>
+                <p class="section-hero__subtitle muted">Catálogo de lavados y detailing</p>
+              </div>
+              <button type="button" id="btn-open-service-modal" class="ventas-btn-nueva">+ Servicio</button>
+            </div>
+            <div class="section-kpi-row" aria-live="polite">
+              <article class="section-kpi">
+                <span class="section-kpi__label">Activos</span>
+                <strong id="servicios-kpi-active" class="section-kpi__value">0</strong>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Total catálogo</span>
+                <strong id="servicios-kpi-total" class="section-kpi__value">0</strong>
+              </article>
+            </div>
+          </header>
+
+          <div id="service-modal" class="sale-modal" hidden role="dialog" aria-modal="true" aria-labelledby="service-modal-title">
+            <div class="sale-modal__backdrop" id="service-modal-backdrop"></div>
+            <div class="sale-modal__panel card glass-panel" role="document">
+              <div class="sale-modal__header">
+                <h2 id="service-modal-title">Nuevo servicio</h2>
+                <button type="button" class="sale-modal__close" id="service-modal-close" aria-label="Cerrar">×</button>
+              </div>
+              <div class="sale-modal__scroll">
+                <form id="service-form" class="sale-form">
+                  <fieldset class="form-fieldset">
+                    <legend>Datos del servicio</legend>
+                    <div class="grid">
+                      <label class="label-span-2">
+                        Nombre
+                        <input id="service-name" type="text" required placeholder="Ej: Lavado full" />
+                      </label>
+                      <label>
+                        Precio (ARS)
+                        <input id="service-price" type="number" min="0" step="0.01" required value="0" />
+                      </label>
+                      <label>
+                        Costo (ARS)
+                        <input id="service-cost" type="number" min="0" step="0.01" value="0" />
+                      </label>
+                      <label class="label-span-2">
+                        Notas
+                        <input id="service-notes" type="text" placeholder="Opcional" />
+                      </label>
+                      <label class="view-filter-check label-span-2">
+                        <input id="service-active" type="checkbox" checked />
+                        Activo (aparece en el catálogo de ventas)
+                      </label>
+                    </div>
+                  </fieldset>
+                  <div class="form-actions sale-modal__form-actions">
+                    <button type="button" class="secondary" id="service-modal-cancel">Cancelar</button>
+                    <button type="submit">Guardar servicio</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <section class="card">
+            <div class="table-head">
+              <h2>Catálogo</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Precio</th>
+                    <th>Costo</th>
+                    <th>Estado</th>
+                    <th>Notas</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="services-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- Pipeline (ManyChat / ads / manual) — tablero Kanban -->
+        <section class="tab-panel" id="tab-pipeline" aria-label="Pipeline de leads">
+          <header class="section-hero card glass-panel">
+            <div class="section-hero__head">
+              <div>
+                <h2 class="section-hero__title">Pipeline</h2>
+                <p class="section-hero__subtitle muted">Seguimiento de leads y conversiones</p>
+              </div>
+              <div class="section-hero__actions">
+                <label class="view-filter-label pipeline-filter-label--inline">
+                  Origen
+                  <select id="pipeline-filter-source" aria-label="Filtrar por origen">
+                    <option value="">Todos</option>
+                    <option value="manual">Manual</option>
+                    <option value="manychat">ManyChat</option>
+                    <option value="meta_ads">Meta / Ads</option>
+                    <option value="organic">Orgánico</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </label>
+                <button type="button" class="secondary pipeline-btn-manual" id="btn-open-pipeline-modal">
+                  + Lead manual
+                </button>
+              </div>
+            </div>
+            <div class="section-kpi-row" aria-live="polite">
+              <article class="section-kpi">
+                <span class="section-kpi__label">Total leads</span>
+                <strong id="pipeline-kpi-total" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">en pipeline</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Activos</span>
+                <strong id="pipeline-kpi-active" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">en proceso</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Convertidos</span>
+                <strong id="pipeline-kpi-won" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">ventas cerradas</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Perdidos</span>
+                <strong id="pipeline-kpi-lost" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">no avanzaron</span>
+              </article>
+            </div>
+          </header>
+          <div class="view-filter-bar view-filter-bar--pipeline" data-view-filter="pipeline">
+            <label class="view-filter-label">
+              Buscar
+              <input id="pipeline-filter-q" type="search" placeholder="Nombre, teléfono, IG…" autocomplete="off" />
+            </label>
+          </div>
+          <section class="card pipeline-intro-card">
+            <div id="pipeline-board" class="pipeline-board" aria-label="Tablero Kanban de leads"></div>
+          </section>
+
+          <div
+            id="pipeline-modal"
+            class="sale-modal pipeline-modal"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pipeline-modal-title"
+            aria-hidden="true"
+          >
+            <div class="sale-modal__backdrop" id="pipeline-modal-backdrop" aria-hidden="true"></div>
+            <div class="sale-modal__panel card glass-panel" role="document">
+              <div class="sale-modal__header">
+                <h2 id="pipeline-modal-title">Agregar lead manual</h2>
+                <button type="button" class="sale-modal__close" id="pipeline-modal-close" aria-label="Cerrar">×</button>
+              </div>
+              <div class="sale-modal__scroll">
+                <p class="fieldset-hint pipeline-modal-lead">
+                  Opcional: usalo si necesitás cargar alguien a mano. El flujo automático va por Supabase / ManyChat.
+                </p>
+                <form id="pipeline-lead-form" class="grid pipeline-lead-form">
+                  <label>
+                    Nombre
+                    <input id="pipeline-name" type="text" required placeholder="Nombre del lead" autocomplete="name" />
+                  </label>
+                  <label>
+                    Teléfono
+                    <input id="pipeline-phone" type="tel" placeholder="+54…" autocomplete="tel" />
+                  </label>
+                  <label>
+                    Email
+                    <input id="pipeline-email" type="email" placeholder="Opcional" autocomplete="email" />
+                  </label>
+                  <label>
+                    Instagram
+                    <input id="pipeline-ig" type="text" placeholder="@usuario u opcional" autocomplete="off" />
+                  </label>
+                  <label>
+                    Etapa inicial
+                    <select id="pipeline-stage" required>
+                      <option value="nuevo">Nuevo</option>
+                      <option value="contactado">Contactado</option>
+                      <option value="interesado">Interesado</option>
+                      <option value="cita">Cita / visita</option>
+                      <option value="venta">Venta</option>
+                      <option value="perdido">Perdido</option>
+                    </select>
+                  </label>
+                  <label>
+                    Origen
+                    <select id="pipeline-source" required>
+                      <option value="manual">Manual (CRM)</option>
+                      <option value="manychat">ManyChat</option>
+                      <option value="meta_ads">Meta / Ads</option>
+                      <option value="organic">Orgánico</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </label>
+                  <label class="label-span-2">
+                    ID ManyChat (subscriber)
+                    <input id="pipeline-manychat-id" type="text" placeholder="Opcional" autocomplete="off" />
+                  </label>
+                  <label class="label-span-2">
+                    Notas
+                    <input id="pipeline-notes" type="text" placeholder="Contexto interno" />
+                  </label>
+                  <div class="form-actions label-span-2 sale-modal__form-actions">
+                    <button type="button" class="secondary" id="pipeline-modal-cancel">Cancelar</button>
+                    <button type="submit">Guardar lead</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+                        <!-- Caja -->
+        <section class="tab-panel" id="tab-caja" aria-label="Caja">
+          <header class="section-hero card glass-panel">
+            <div class="section-hero__head">
+              <div>
+                <h2 class="section-hero__title">Caja</h2>
+                <p class="section-hero__subtitle muted">Ingresos, egresos y balance mensual</p>
+              </div>
+              <button type="button" id="btn-open-cash-modal" class="ventas-btn-nueva">+ Movimiento</button>
+            </div>
+            <div class="section-kpi-row" aria-live="polite">
+              <article class="section-kpi">
+                <span class="section-kpi__label">Ingresos mes</span>
+                <strong id="caja-kpi-ingresos" class="section-kpi__value">$0.00</strong>
+                <span class="section-kpi__hint muted">ventas + caja ARS</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Egresos mes</span>
+                <strong id="caja-kpi-egresos" class="section-kpi__value">$0.00</strong>
+                <span class="section-kpi__hint muted">ARS egresados</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Movimientos</span>
+                <strong id="caja-kpi-count" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">ventas + caja del mes</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Balance</span>
+                <strong id="caja-kpi-balance" class="section-kpi__value">$0.00</strong>
+                <span class="section-kpi__hint muted">todo lo que entró − egresos</span>
+              </article>
+            </div>
+          </header>
+          <section class="week-close-compact card glass-panel" id="cash-week-close-panel">
+            <div class="week-close-compact__inner">
+              <div class="week-close-compact__main">
+                <h2 class="week-close-compact__title">Cierre semanal</h2>
+                <p id="week-close-summary" class="week-close-compact__summary muted">
+                  Semana domingo → sábado
+                </p>
+              </div>
+              <span id="week-close-status" class="week-close-status week-close-status--open">Pendiente</span>
+              <button type="button" id="btn-open-week-close-modal" class="ventas-btn-nueva week-close-compact__btn">
+                Abrir cierre
+              </button>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="table-head table-head--filters">
+              <h2>Historial de caja</h2>
+              <button type="button" class="secondary" id="btn-export-cash-csv">Exportar CSV</button>
+            </div>
+            <div class="view-filter-bar" data-view-filter="cash">
+              <span class="view-filter-period view-filter-period--month">Mes: <strong data-view-period-label></strong></span>
+              <label class="view-filter-label">
+                Buscar
+                <input id="cash-filter-q" type="search" placeholder="Concepto…" autocomplete="off" />
+              </label>
+              <label class="view-filter-label">
+                Tipo
+                <select id="cash-filter-type" aria-label="Filtrar por tipo de movimiento">
+                  <option value="">Todos</option>
+                  <option value="ingreso">Ingreso</option>
+                  <option value="egreso">Egreso</option>
+                  <option value="venta">Venta (desde Ventas)</option>
+                </select>
+              </label>
+              <label class="view-filter-label">
+                Destino
+                <select id="cash-filter-dest" aria-label="Filtrar por destino">
+                  <option value="">Todos</option>
+                  <option value="reparto">Reparto general</option>
+                  <option value="reserva">Reserva</option>
+                  <option value="restock">Insumos</option>
+                  <option value="socios">Socios</option>
+                  <option value="tecnico">Técnico</option>
+                </select>
+              </label>
+              <label class="view-filter-check">
+                <input id="cash-filter-all-months" type="checkbox" />
+                Ver todos los meses
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Destino</th>
+                    <th>Concepto</th>
+                    <th>Monto</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="cash-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- Facturación -->
+        <section class="tab-panel" id="tab-facturacion" aria-label="Facturación">
+          <header class="section-hero card glass-panel">
+            <div class="section-hero__head">
+              <div>
+                <h2 class="section-hero__title">Facturación</h2>
+                <p class="section-hero__subtitle muted">Comprobantes y trazabilidad</p>
+              </div>
+              <button type="button" id="btn-open-invoice-modal" class="ventas-btn-nueva">Emitir comprobante</button>
+            </div>
+            <div class="section-kpi-row" aria-live="polite">
+              <article class="section-kpi">
+                <span class="section-kpi__label">Comprobantes</span>
+                <strong id="fact-kpi-count" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">emitidos total</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Del mes</span>
+                <strong id="fact-kpi-month" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">emitidos este mes</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Facturado mes</span>
+                <strong id="fact-kpi-revenue" class="section-kpi__value">$0.00</strong>
+                <span class="section-kpi__hint muted">ARS en comprobantes</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Anulados</span>
+                <strong id="fact-kpi-voided" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">notas de crédito / anulados</span>
+              </article>
+            </div>
+          </header>
+
+          <section class="card">
+            <div class="table-head table-head--filters">
+              <h2>Comprobantes emitidos</h2>
+              <button type="button" id="btn-invoice-export" class="secondary">Exportar CSV</button>
+            </div>
+            <div class="view-filter-bar" data-view-filter="invoices">
+              <label class="view-filter-label">
+                Buscar
+                <input id="invoices-filter-q" type="search" placeholder="Cliente, número…" autocomplete="off" />
+              </label>
+              <label class="view-filter-label">
+                Estado
+                <select id="invoices-filter-status" aria-label="Filtrar por estado">
+                  <option value="">Todos</option>
+                  <option value="emitido">Emitido</option>
+                  <option value="anulado">Anulado</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Número</th>
+                    <th>Tipo</th>
+                    <th>Cliente</th>
+                    <th>Venta</th>
+                    <th>Impuesto</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="invoices-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- Deudores · cuotas por cobrar -->
+        <section class="tab-panel" id="tab-deudores" aria-label="Deudores y cuotas por cobrar">
+          <header class="section-hero card glass-panel">
+            <div class="section-hero__head">
+              <div>
+                <h2 class="section-hero__title">Deudores</h2>
+                <p class="section-hero__subtitle muted">Cuotas, tarjetas y pendientes por cobrar</p>
+              </div>
+              <button type="button" id="btn-open-receivable-modal" class="ventas-btn-nueva">+ Pendiente</button>
+            </div>
+            <div class="section-kpi-row" aria-live="polite">
+              <article class="section-kpi">
+                <span class="section-kpi__label">Total pendiente</span>
+                <strong id="deudores-kpi-total" class="section-kpi__value">$0.00</strong>
+                <span class="section-kpi__hint muted">ARS por cobrar</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Deudores</span>
+                <strong id="deudores-kpi-count" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">registros activos</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Vencidos</span>
+                <strong id="deudores-kpi-overdue" class="section-kpi__value">0</strong>
+                <span class="section-kpi__hint muted">ya pasó la fecha</span>
+              </article>
+              <article class="section-kpi">
+                <span class="section-kpi__label">Próximo cobro</span>
+                <strong id="deudores-kpi-next" class="section-kpi__value">—</strong>
+                <span class="section-kpi__hint muted">más cercano</span>
+              </article>
+            </div>
+          </header>
+          <section class="card">
+            <div class="table-head table-head--filters">
+              <h2>Pendientes por cobrar</h2>
+            </div>
+            <div class="view-filter-bar" data-view-filter="receivables">
+              <label class="view-filter-label">
+                Buscar
+                <input id="receivables-filter-q" type="search" placeholder="Cliente, concepto…" autocomplete="off" />
+              </label>
+              <label class="view-filter-label">
+                Tipo
+                <select id="receivables-filter-kind" aria-label="Filtrar por tipo">
+                  <option value="">Todos</option>
+                  <option value="cuotas">Cuotas / plan</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Concepto</th>
+                    <th>Tipo</th>
+                    <th>Vence</th>
+                    <th>Pendiente</th>
+                    <th>Notas</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="receivables-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+                                <!-- Configuraciones: una vista por sección (Metas / Vendedores) -->
+        <section class="tab-panel" id="tab-configuraciones" aria-label="Configuraciones">
+          <nav class="config-subnav card glass-panel" role="tablist" aria-label="Secciones de configuración">
+            <button
+              type="button"
+              role="tab"
+              class="config-subnav-tab active"
+              id="config-tab-metas"
+              data-config-subpanel="metas"
+              aria-controls="config-panel-metas"
+              aria-selected="true"
+            >
+              Metas del negocio
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="config-subnav-tab"
+              id="config-tab-vendedores"
+              data-config-subpanel="vendedores"
+              aria-controls="config-panel-vendedores"
+              aria-selected="false"
+            >
+              Vendedores
+            </button>
+          </nav>
+
+          <div
+            id="config-panel-metas"
+            class="config-panel"
+            role="tabpanel"
+            aria-labelledby="config-tab-metas"
+          >
+          <section class="card glass-panel goals-card">
+            <h2 class="goals-title">Metas del negocio</h2>
+            <p class="section-hint goals-hint">
+              Las metas se comparan con el <strong>mes del selector Período</strong> (arriba, mismo que en Resumen). Se guardan en este navegador.
+            </p>
+            <div class="goals-inputs grid">
+              <label>
+                Meta ingresos (USD)
+                <input id="goal-income" type="number" min="0" step="1" placeholder="Ej. 5000" />
+              </label>
+              <label>
+                Meta resultado (USD)
+                <small class="label-help muted">Ingresos del mes − egresos de caja</small>
+                <input id="goal-profit" type="number" min="0" step="1" placeholder="Ej. 1500" />
+              </label>
+              <label>
+                Meta unidades vendidas
+                <input id="goal-units" type="number" min="0" step="1" placeholder="Ej. 20" />
+              </label>
+              <label>
+                Cotización (opcional / compat)
+                <small class="label-help muted">El lavadero opera en ARS. Este campo queda por compatibilidad con el CRM base.</small>
+                <input id="goal-dolar-blue" type="number" min="0" step="1" placeholder="Ej. 1250" />
+              </label>
+            </div>
+            <h3 class="goals-subtitle">Reparto de la ganancia</h3>
+            <p class="section-hint goals-hint goals-hint--split">
+              Las <strong>ventas</strong> y los ingresos de Caja marcados como <strong>Reparto general</strong> forman la base (menos comisiones de vendedores) y se reparten según los %.
+              Ingresos/egresos con destino fijo (<strong>Reserva</strong>, <strong>Insumos</strong> o <strong>Socios</strong>) van directo a ese bucket. Las comisiones de vendedores no se descuentan dos veces.
+              <strong>Reserva + Insumos + Socios</strong> deben sumar 100; si no, se normalizan al guardar.
+            </p>
+            <div class="goals-inputs grid goals-split-grid">
+              <label>
+                Reserva (%)
+                <input id="split-reserve-pct" type="number" min="0" max="100" step="0.1" />
+              </label>
+              <label>
+                Insumos (%)
+                <input id="split-middle-pct" type="number" min="0" max="100" step="0.1" />
+              </label>
+              <label>
+                Socios (%)
+                <input id="split-partners-pct" type="number" min="0" max="100" step="0.1" />
+              </label>
+            </div>
+
+            <div class="goals-actions">
+              <button type="button" id="btn-save-goals" class="secondary">Guardar metas</button>
+            </div>
+            <div id="goals-progress" class="goals-progress" aria-live="polite"></div>
+          </section>
+          </div>
+
+          <div
+            id="config-panel-vendedores"
+            class="config-panel"
+            role="tabpanel"
+            aria-labelledby="config-tab-vendedores"
+            hidden
+          >
+            <section class="card">
+              <h2>Vendedores</h2>
+              <p class="section-hint">
+                Definí el <strong>% de comisión sobre lo que entró</strong> en cada venta (monto neto cobrado por línea). Al registrar una venta elegís quién vendió; acá ves totales y comisiones por período.
+              </p>
+              <p class="section-hint muted">
+                <strong>Supabase:</strong> tiene que existir la tabla <code>salespeople</code> (y columnas en <code>sales</code>). Si ves «Could not find the table…», en el panel de Supabase → <strong>SQL</strong> ejecutá el archivo
+                <code>CRM/supabase/migration_sales_sellers.sql</code> del proyecto y recargá la app.
+              </p>
+              <p id="seller-edit-hint" class="section-hint muted" hidden>Editando vendedor — guardá los cambios o cancelá la edición.</p>
+              <form id="seller-form" class="grid">
+                <label>
+                  Nombre
+                  <input id="seller-name" type="text" required placeholder="Ej: Ana" autocomplete="name" />
+                </label>
+                <label>
+                  Comisión % (sobre lo que entró)
+                  <input id="seller-commission-pct" type="number" min="0" max="100" step="0.1" value="0" required />
+                </label>
+                <label class="label-span-2 seller-active-row">
+                  <input id="seller-active" type="checkbox" checked />
+                  Activo (aparece al cargar ventas nuevas)
+                </label>
+                <div class="form-actions form-actions--inline label-span-2">
+                  <button type="submit" id="seller-form-submit-btn">Agregar vendedor</button>
+                  <button type="button" class="secondary" id="btn-seller-cancel-edit" hidden>Cancelar edición</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="card">
+              <div class="table-head">
+                <h2>Listado</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Comisión %</th>
+                      <th>Estado</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sellers-body"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="table-head table-head--filters">
+                <h2>Resultados por vendedor</h2>
+                <div class="table-head-actions">
+                  <button type="button" class="secondary" id="btn-mark-comm-paid">Marcar comisiones pagadas</button>
+                  <button type="button" class="secondary" id="btn-recalc-comm">Recalcular comisiones</button>
+                </div>
+              </div>
+              <p class="section-hint muted">
+                Usa el <strong>Período</strong> del encabezado (mismo mes que Resumen). Filtra por <strong>fecha de venta</strong>. Las
+                <strong>comisiones</strong> usan el <strong>% actual</strong> del vendedor sobre el <strong>monto que entró</strong> de
+                cada línea (neto cobrado, de cada venta).
+              </p>
+              <select id="vendedores-stats-month" hidden aria-hidden="true" tabindex="-1"></select>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Vendedor</th>
+                      <th>Ventas (#)</th>
+                      <th>Total vendido</th>
+                      <th>Resultado</th>
+                      <th>Comisiones</th>
+                      <th>Pendiente de pago</th>
+                    </tr>
+                  </thead>
+                  <tbody id="seller-stats-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          
+        </section>
+
+        </div>
+    </div>
+
+    <div
+      id="client-profile-modal"
+      class="sale-modal client-profile-modal"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="client-profile-title"
+      aria-hidden="true"
+    >
+      <div class="sale-modal__backdrop" id="client-profile-backdrop" aria-hidden="true"></div>
+      <div class="sale-modal__panel card glass-panel" role="document">
+        <div class="sale-modal__header">
+          <h2 id="client-profile-title">Ficha de cliente</h2>
+          <button type="button" class="sale-modal__close" id="client-profile-close" aria-label="Cerrar">×</button>
+        </div>
+        <div class="sale-modal__scroll" id="client-profile-body"></div>
+      </div>
+    </div>
+
+    <!-- Modales CRUD: caja, facturación, deudores, inventario -->
+    <div
+      id="week-close-modal"
+      class="sale-modal crud-form-modal crud-form-modal--wide week-close-modal"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="week-close-modal-title"
+      aria-hidden="true"
+    >
+      <div class="sale-modal__backdrop" id="week-close-modal-backdrop" aria-hidden="true"></div>
+      <div class="sale-modal__panel card glass-panel" role="document">
+        <div class="sale-modal__header">
+          <div>
+            <h2 id="week-close-modal-title">Cierre semanal de caja</h2>
+            <p id="week-close-label" class="week-close-modal__period muted"></p>
+          </div>
+          <button type="button" class="sale-modal__close" id="week-close-modal-close" aria-label="Cerrar">×</button>
+        </div>
+        <div class="sale-modal__scroll">
+          <p class="section-hint muted week-close-hint">
+            Semana <strong>domingo → sábado</strong>. El esperado suma ventas y movimientos de caja de esa semana.
+            Si una venta no tiene medios de pago cargados, se cuenta el total cobrado como efectivo.
+          </p>
+          <div class="week-close-grid">
+            <div class="week-close-block week-close-block--expected">
+              <h3 class="week-close-block__title">Esperado (sistema)</h3>
+              <div class="week-close-stats">
+                <article class="week-close-stat">
+                  <span class="week-close-stat__label">Efectivo ventas</span>
+                  <strong id="week-exp-cash" class="week-close-stat__val">$0.00</strong>
+                </article>
+                <article class="week-close-stat">
+                  <span class="week-close-stat__label">Transferencias</span>
+                  <strong id="week-exp-transfer" class="week-close-stat__val">$0.00</strong>
+                </article>
+                <article class="week-close-stat">
+                  <span class="week-close-stat__label">Tarjeta</span>
+                  <strong id="week-exp-card" class="week-close-stat__val">$0.00</strong>
+                </article>
+                <article class="week-close-stat">
+                  <span class="week-close-stat__label">Otros</span>
+                  <strong id="week-exp-other" class="week-close-stat__val">$0.00</strong>
+                </article>
+                <article class="week-close-stat week-close-stat--in">
+                  <span class="week-close-stat__label">Ingresos caja</span>
+                  <strong id="week-exp-caja-in" class="week-close-stat__val">$0.00</strong>
+                </article>
+                <article class="week-close-stat week-close-stat--out">
+                  <span class="week-close-stat__label">Egresos caja</span>
+                  <strong id="week-exp-caja-out" class="week-close-stat__val">$0.00</strong>
+                </article>
+              </div>
+              <div class="week-close-total-bar">
+                <span>Total semana</span>
+                <strong id="week-exp-total">$0.00</strong>
+              </div>
+            </div>
+            <div class="week-close-block week-close-block--count">
+              <h3 class="week-close-block__title">Conteo real (sábado)</h3>
+              <form class="grid week-close-form" onsubmit="return false;">
+                <label>
+                  Fecha de cierre
+                  <input id="week-close-date" type="date" required />
+                </label>
+                <label>
+                  Efectivo contado
+                  <input id="week-close-counted-cash" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Transferencias verificadas
+                  <input id="week-close-counted-transfer" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Tarjeta verificada
+                  <input id="week-close-counted-card" type="number" min="0" step="0.01" />
+                </label>
+                <label class="label-span-2">
+                  Notas
+                  <input id="week-close-notes" type="text" placeholder="Diferencias, observaciones…" />
+                </label>
+                <div class="week-close-diff-box label-span-2">
+                  <span class="week-close-diff-box__label">Diferencia efectivo</span>
+                  <strong id="week-close-diff" class="week-close-diff">$0.00</strong>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="week-close-history-wrap">
+            <h3 class="week-close-block__title">Historial reciente</h3>
+            <div class="table-wrap week-close-history">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cierre</th>
+                    <th>Semana</th>
+                    <th>Esperado</th>
+                    <th>Efectivo contado</th>
+                    <th>Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody id="week-close-history-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions sale-modal__form-actions">
+          <button type="button" class="secondary" id="week-close-modal-cancel">Cancelar</button>
+          <button type="button" id="btn-week-close-save" class="week-close-save-btn">Guardar cierre semanal</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="cash-modal"
+      class="sale-modal crud-form-modal"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cash-modal-title"
+      aria-hidden="true"
+    >
+      <div class="sale-modal__backdrop" id="cash-modal-backdrop" aria-hidden="true"></div>
+      <div class="sale-modal__panel card glass-panel" role="document">
+        <div class="sale-modal__header">
+          <h2 id="cash-modal-title">Nuevo movimiento</h2>
+          <button type="button" class="sale-modal__close" id="cash-modal-close" aria-label="Cerrar">×</button>
+        </div>
+        <div class="sale-modal__scroll">
+          <p id="cash-edit-hint" class="section-hint muted" hidden>Estás corrigiendo un movimiento ya guardado.</p>
+          <form id="cash-form" class="grid">
+            <label>
+              Tipo
+              <select id="cash-type" required>
+                <option value="ingreso">Ingreso</option>
+                <option value="egreso">Egreso</option>
+              </select>
+            </label>
+            <label>
+              Fecha
+              <input id="cash-date" type="date" required />
+            </label>
+            <label>
+              Concepto
+              <input id="cash-concept" type="text" placeholder="Ej: Alquiler, envío, accesorio" required />
+            </label>
+            <label>
+              Monto
+              <input id="cash-amount" type="number" min="0" step="0.01" required />
+            </label>
+            <label class="label-span-2" id="cash-reparto-dest-wrap">
+              Destino del movimiento
+              <select id="cash-reparto-dest" required aria-label="Destino del movimiento en caja"></select>
+              <small id="cash-reparto-dest-hint" class="label-help muted"></small>
+            </label>
+          </form>
+        </div>
+        <div class="form-actions sale-modal__form-actions">
+          <button type="button" class="secondary" id="cash-modal-cancel">Cancelar</button>
+          <button type="submit" form="cash-form" id="cash-form-submit-btn">Guardar movimiento</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="invoice-modal"
+      class="sale-modal crud-form-modal"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="invoice-modal-title"
+      aria-hidden="true"
+    >
+      <div class="sale-modal__backdrop" id="invoice-modal-backdrop" aria-hidden="true"></div>
+      <div class="sale-modal__panel card glass-panel" role="document">
+        <div class="sale-modal__header">
+          <h2 id="invoice-modal-title">Emitir comprobante</h2>
+          <button type="button" class="sale-modal__close" id="invoice-modal-close" aria-label="Cerrar">×</button>
+        </div>
+        <div class="sale-modal__scroll">
+          <p class="section-hint muted">Ligado a una venta, con numeración automática por tipo.</p>
+          <p id="invoice-edit-hint" class="section-hint muted" hidden>
+            Corrigiendo comprobante: tipo y venta no se cambian; se actualizan fecha, impuesto y observaciones.
+          </p>
+          <form id="invoice-form" class="grid receivables-form">
+            <label>
+              Venta
+              <select id="invoice-sale-id" required></select>
+            </label>
+            <label>
+              Tipo de comprobante
+              <select id="invoice-type" required>
+                <option value="ticket">Ticket</option>
+                <option value="factura_b">Factura B</option>
+                <option value="factura_a">Factura A</option>
+                <option value="nota_credito">Nota de crédito</option>
+              </select>
+            </label>
+            <label>
+              Fecha de emisión
+              <input id="invoice-date" type="date" required />
+            </label>
+            <label>
+              % Impuesto
+              <input id="invoice-tax-pct" type="number" min="0" max="100" step="0.01" value="0" required />
+            </label>
+            <label class="label-span-2">
+              Observaciones
+              <input id="invoice-notes" type="text" placeholder="Opcional" />
+            </label>
+          </form>
+        </div>
+        <div class="form-actions sale-modal__form-actions">
+          <button type="button" class="secondary" id="invoice-modal-cancel">Cancelar</button>
+          <button type="submit" form="invoice-form" id="invoice-form-submit-btn">Emitir comprobante</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="receivable-modal"
+      class="sale-modal crud-form-modal"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="receivable-modal-title"
+      aria-hidden="true"
+    >
+      <div class="sale-modal__backdrop" id="receivable-modal-backdrop" aria-hidden="true"></div>
+      <div class="sale-modal__panel card glass-panel" role="document">
+        <div class="sale-modal__header">
+          <h2 id="receivable-modal-title">Nuevo pendiente</h2>
+          <button type="button" class="sale-modal__close" id="receivable-modal-close" aria-label="Cerrar">×</button>
+        </div>
+        <div class="sale-modal__scroll">
+          <p id="recv-edit-hint" class="section-hint muted" hidden>Estás editando un pendiente ya guardado.</p>
+          <form id="receivable-form" class="grid receivables-form">
+            <label>
+              Cliente
+              <input id="recv-client" type="text" required placeholder="Nombre" autocomplete="name" />
+            </label>
+            <label>
+              Concepto
+              <input id="recv-concept" type="text" required placeholder="Ej: Cuota 2/2, Liquidación Naranja" />
+            </label>
+            <label>
+              Monto pendiente (USD)
+              <input id="recv-amount" type="number" min="0" step="0.01" required />
+            </label>
+            <label>
+              Próximo vencimiento / cobro
+              <input id="recv-due" type="date" />
+            </label>
+            <label>
+              Tipo
+              <select id="recv-kind" required>
+                <option value="cuotas">Cuotas / plan</option>
+                <option value="tarjeta">Tarjeta (liquida después)</option>
+                <option value="otro">Otro</option>
+              </select>
+            </label>
+            <label class="label-span-2">
+              Notas
+              <input id="recv-notes" type="text" placeholder="Opcional" />
+            </label>
+          </form>
+        </div>
+        <div class="form-actions sale-modal__form-actions">
+          <button type="button" class="secondary" id="receivable-modal-cancel">Cancelar</button>
+          <button type="submit" form="receivable-form" id="recv-form-submit-btn">Agregar pendiente</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="recv-pay-dest-modal"
+      class="sale-modal recv-pay-modal"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="recv-pay-dest-title"
+      aria-hidden="true"
+    >
+      <div class="sale-modal__backdrop" id="recv-pay-dest-backdrop" aria-hidden="true"></div>
+      <div class="sale-modal__panel card glass-panel" role="document">
+        <div class="sale-modal__header">
+          <h2 id="recv-pay-dest-title">Registrar cobro</h2>
+          <button type="button" class="sale-modal__close" id="recv-pay-dest-cancel" aria-label="Cerrar">×</button>
+        </div>
+        <div class="sale-modal__scroll recv-pay-modal__body">
+          <div class="recv-pay-amount-card">
+            <span class="recv-pay-amount-card__label">Monto a registrar</span>
+            <strong id="recv-pay-dest-amount" class="recv-pay-amount-card__val">$0.00</strong>
+          </div>
+          <form id="recv-pay-dest-form" class="grid">
+            <label class="label-span-2">
+              Destino del ingreso
+              <select id="recv-pay-dest-select" required aria-label="Destino del cobro en caja"></select>
+            </label>
+            <div class="form-actions label-span-2 sale-modal__form-actions">
+              <button type="button" class="secondary" id="recv-pay-dest-cancel-btn">Cancelar</button>
+              <button type="submit">Confirmar cobro</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="./config.js?v=1"></script>
+    <script src="./app.js?v=1"></script>
+    <script src="./business-extras.js?v=1"></script>
+  </body>
+</html>
