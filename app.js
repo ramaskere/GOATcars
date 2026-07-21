@@ -3758,6 +3758,7 @@ function getCarQueueOrders() {
         vehicleType: sale.imei || "",
         services: [],
         total: 0,
+        paid: 0,
         status: normalizeSaleStatus(sale.status),
         finishedAt: sale.finishedAt || null,
       });
@@ -3765,10 +3766,19 @@ function getCarQueueOrders() {
     const g = groups.get(key);
     g.services.push({ name: sale.model || "Servicio", qty: numeric(sale.quantity, 1) });
     g.total += numeric(sale.saleTotal, 0);
+    g.paid +=
+      numeric(sale.paymentCash, 0) +
+      numeric(sale.paymentTransfer, 0) +
+      numeric(sale.paymentCard, 0) +
+      numeric(sale.paymentOther, 0);
     const st = normalizeSaleStatus(sale.status);
     if (SALE_STATUS_FLOW.indexOf(st) < SALE_STATUS_FLOW.indexOf(g.status)) g.status = st;
   });
   return [...groups.values()];
+}
+
+function orderIsPaid(order) {
+  return order.total > 0 ? order.paid >= order.total - 0.01 : order.paid > 0;
 }
 
 function renderCarQueue() {
@@ -3812,9 +3822,15 @@ function renderCarQueue() {
       .map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${escapeHtml(s.name)}`)
       .join(" + ");
     const isOldPending = o.status === "en_proceso" && o.date && o.date < today;
+    const paid = orderIsPaid(o);
+    const payBadge = paid
+      ? `<span class="status-badge status-badge--pagado">Cobrado</span>`
+      : `<span class="status-badge status-badge--impago">Falta cobrar</span>`;
     let actionHtml = "";
     if (o.status === "en_proceso") {
-      actionHtml = `<button type="button" class="car-queue-card__action queue-status-btn" data-key="${escapeHtml(o.key)}" data-next="terminado">Marcar terminado</button>`;
+      actionHtml = `<button type="button" class="car-queue-card__action queue-status-btn" data-key="${escapeHtml(o.key)}" data-next="terminado">Terminado ✓</button>`;
+    } else if (!paid) {
+      actionHtml = `<button type="button" class="car-queue-card__action car-queue-card__action--charge queue-charge-btn" data-key="${escapeHtml(o.key)}">Cobrar ${currency(Math.max(0, o.total - o.paid))}</button>`;
     } else if (o.status === "terminado") {
       actionHtml = `<button type="button" class="car-queue-card__action car-queue-card__action--deliver queue-status-btn" data-key="${escapeHtml(o.key)}" data-next="entregado">Entregar auto</button>`;
     } else {
@@ -3823,10 +3839,10 @@ function renderCarQueue() {
     card.innerHTML = `
       <div class="car-queue-card__top">
         <strong class="car-queue-card__plate">${escapeHtml(o.plate || "Sin patente")}</strong>
-        ${renderSaleStatusBadge(o.status)}
+        <span class="car-queue-card__badges">${renderSaleStatusBadge(o.status)}${payBadge}</span>
       </div>
       <div class="car-queue-card__vehicle muted">${escapeHtml(vehicleLine || "Vehículo sin datos")}</div>
-      <div class="car-queue-card__client">${escapeHtml(o.client || "—")}</div>
+      ${o.client && o.client !== o.plate ? `<div class="car-queue-card__client">${escapeHtml(o.client)}</div>` : ""}
       <div class="car-queue-card__services">${servicesLine || "—"}</div>
       <div class="car-queue-card__foot">
         <span class="car-queue-card__total">${currency(o.total)}</span>
@@ -3882,10 +3898,390 @@ async function setCarOrderStatus(orderKey, nextStatus) {
 function bindCarQueueUi() {
   const listEl = document.getElementById("car-queue-list");
   listEl?.addEventListener("click", (event) => {
-    const btn = event.target instanceof HTMLElement ? event.target.closest(".queue-status-btn") : null;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (!target) return;
+    const chargeBtn = target.closest(".queue-charge-btn");
+    if (chargeBtn) {
+      openChargeModal(chargeBtn.dataset.key || "");
+      return;
+    }
+    const btn = target.closest(".queue-status-btn");
     if (!btn) return;
     btn.disabled = true;
     void setCarOrderStatus(btn.dataset.key || "", btn.dataset.next || "");
+  });
+}
+
+/* ========== Ingreso rápido de autos ========== */
+
+let qcSelectedServiceId = null;
+
+function renderQuickCheckinServices() {
+  const wrap = document.getElementById("qc-service-options");
+  if (!wrap) return;
+  const services = getServices().filter((s) => s.active !== false);
+  wrap.innerHTML = "";
+  if (services.length === 0) {
+    wrap.innerHTML = `<p class="muted">No hay servicios cargados. Agregalos en la pestaña Servicios.</p>`;
+    qcSelectedServiceId = null;
+    return;
+  }
+  if (!services.some((s) => String(s.id) === String(qcSelectedServiceId))) qcSelectedServiceId = null;
+  services.forEach((svc) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "qc-service-btn";
+    btn.dataset.serviceId = String(svc.id);
+    btn.setAttribute("role", "radio");
+    const selected = String(svc.id) === String(qcSelectedServiceId);
+    btn.setAttribute("aria-checked", selected ? "true" : "false");
+    if (selected) btn.classList.add("qc-service-btn--selected");
+    btn.innerHTML = `<span class="qc-service-btn__name">${escapeHtml(svc.name)}</span><span class="qc-service-btn__price">${currency(numeric(svc.price, 0))}</span>`;
+    wrap.appendChild(btn);
+  });
+}
+
+async function saveQuickCheckin() {
+  const dateEl = document.getElementById("qc-date");
+  const brandEl = document.getElementById("qc-brand");
+  const plateEl = document.getElementById("qc-plate");
+  const date = dateEl?.value || localTodayIso();
+  const brand = (brandEl?.value || "").trim();
+  const plate = (plateEl?.value || "").trim().toUpperCase().replace(/\s+/g, "");
+  const service = getServices().find((s) => String(s.id) === String(qcSelectedServiceId));
+
+  if (!brand) return alert("Falta la marca del auto.");
+  if (!plate) return alert("Falta la patente.");
+  if (!service) return alert("Elegí un servicio (tocá uno de los botones).");
+
+  const price = numeric(service.price, 0);
+  const cost = numeric(service.cost, 0);
+  const orderId =
+    typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `ord-${Date.now()}`;
+
+  if (useCloud) {
+    try {
+      const userId = await getUserId();
+      const payload = {
+        user_id: userId,
+        sale_date: date,
+        client_name: plate,
+        phone: "",
+        ig_handle: "",
+        service_name: service.name,
+        vehicle_plate: plate,
+        vehicle_brand: brand,
+        vehicle_model: "",
+        vehicle_type: "",
+        quantity: 1,
+        unit_sale: price,
+        unit_cost: cost,
+        payment: "",
+        payment_cash: 0,
+        payment_transfer: 0,
+        payment_card: 0,
+        payment_other: 0,
+        sale_total: price,
+        cost_total: cost,
+        profit: price - cost,
+        seller_id: null,
+        commission_pct_applied: null,
+        commission_amount: 0,
+        status: "en_proceso",
+        order_id: orderId,
+        finished_at: null,
+      };
+      let { error } = await supabaseClient.from("sales").insert(payload);
+      if (error && /schema cache|could not find/i.test(error.message || "")) {
+        const { ig_handle: _a, status: _b, order_id: _c, finished_at: _d, ...legacy } = payload;
+        ({ error } = await supabaseClient.from("sales").insert(legacy));
+      }
+      if (error) throw error;
+    } catch (e) {
+      alert(`No se pudo ingresar el auto: ${e?.message || e}`);
+      return;
+    }
+  } else {
+    const sales = readList(KEYS.sales);
+    sales.unshift({
+      id: crypto.randomUUID(),
+      date,
+      client: plate,
+      phone: "",
+      igHandle: "",
+      model: service.name,
+      color: plate,
+      storage: brand,
+      battery: "",
+      imei: "",
+      quantity: 1,
+      unitSale: price,
+      unitCost: cost,
+      payment: "",
+      paymentCash: 0,
+      paymentTransfer: 0,
+      paymentCard: 0,
+      paymentOther: 0,
+      saleTotal: price,
+      costTotal: cost,
+      profit: price - cost,
+      deductFromInventory: false,
+      sellerId: null,
+      commissionPctApplied: null,
+      commissionAmount: 0,
+      status: "en_proceso",
+      orderId,
+      finishedAt: null,
+    });
+    writeList(KEYS.sales, sales);
+  }
+
+  if (brandEl) brandEl.value = "";
+  if (plateEl) plateEl.value = "";
+  qcSelectedServiceId = null;
+
+  const feedback = document.getElementById("qc-feedback");
+  if (feedback) {
+    feedback.textContent = `✓ ${plate} ingresado a la línea de trabajo`;
+    feedback.hidden = false;
+    setTimeout(() => {
+      feedback.hidden = true;
+    }, 3000);
+  }
+
+  await afterDataChange();
+  brandEl?.focus();
+}
+
+function bindQuickCheckinUi() {
+  const form = document.getElementById("quick-checkin-form");
+  if (!form) return;
+  const dateEl = document.getElementById("qc-date");
+  if (dateEl && !dateEl.value) dateEl.value = localTodayIso();
+
+  const plateEl = document.getElementById("qc-plate");
+  plateEl?.addEventListener("input", () => {
+    plateEl.value = plateEl.value.toUpperCase();
+  });
+
+  document.getElementById("qc-service-options")?.addEventListener("click", (event) => {
+    const btn = event.target instanceof HTMLElement ? event.target.closest(".qc-service-btn") : null;
+    if (!btn) return;
+    qcSelectedServiceId = btn.dataset.serviceId || null;
+    renderQuickCheckinServices();
+  });
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const submitBtn = document.getElementById("qc-submit");
+    if (submitBtn) submitBtn.disabled = true;
+    void saveQuickCheckin().finally(() => {
+      if (submitBtn) submitBtn.disabled = false;
+    });
+  });
+}
+
+/* ========== Cobro rápido (modal) ========== */
+
+let chargeModalOrderKey = null;
+let chargeSelectedMethod = null;
+
+const CHARGE_METHOD_FIELDS = {
+  efectivo: { local: "paymentCash", cloud: "payment_cash" },
+  transferencia: { local: "paymentTransfer", cloud: "payment_transfer" },
+  tarjeta: { local: "paymentCard", cloud: "payment_card" },
+  otro: { local: "paymentOther", cloud: "payment_other" },
+};
+
+function openChargeModal(orderKey) {
+  const order = getCarQueueOrders().find((o) => o.key === orderKey);
+  if (!order) return;
+  chargeModalOrderKey = orderKey;
+  chargeSelectedMethod = null;
+
+  const modal = document.getElementById("charge-modal");
+  const vehicleEl = document.getElementById("charge-modal-vehicle");
+  const servicesEl = document.getElementById("charge-modal-services");
+  const amountEl = document.getElementById("charge-amount");
+  if (vehicleEl) vehicleEl.textContent = [order.plate, order.brand].filter(Boolean).join(" · ") || "Auto";
+  if (servicesEl)
+    servicesEl.textContent = order.services.map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${s.name}`).join(" + ");
+  if (amountEl) amountEl.value = String(Math.max(0, Math.round(order.total - order.paid)));
+
+  document.querySelectorAll(".charge-method-btn").forEach((btn) => {
+    btn.classList.remove("charge-method-btn--selected");
+  });
+  const confirmBtn = document.getElementById("charge-confirm");
+  if (confirmBtn) confirmBtn.disabled = true;
+
+  if (modal) {
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closeChargeModal() {
+  const modal = document.getElementById("charge-modal");
+  if (modal) {
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+  }
+  chargeModalOrderKey = null;
+  chargeSelectedMethod = null;
+}
+
+async function confirmChargeOrder() {
+  const order = getCarQueueOrders().find((o) => o.key === chargeModalOrderKey);
+  const method = CHARGE_METHOD_FIELDS[chargeSelectedMethod];
+  if (!order || !method) return;
+
+  const amountEl = document.getElementById("charge-amount");
+  const amount = Math.max(0, numeric(amountEl?.value, 0));
+  if (amount <= 0) {
+    alert("El monto a cobrar tiene que ser mayor a 0.");
+    return;
+  }
+
+  const affected = getSales().filter((s) =>
+    order.orderId ? String(s.orderId) === String(order.orderId) : String(s.id) === String(order.firstSaleId)
+  );
+  if (affected.length === 0) return;
+
+  // Repartimos el cobro entre las líneas del ingreso (proporcional a su total); la última absorbe el redondeo.
+  const orderTotal = affected.reduce((acc, s) => acc + numeric(s.saleTotal, 0), 0) || 1;
+  let assigned = 0;
+  const shares = affected.map((s, idx) => {
+    if (idx === affected.length - 1) return amount - assigned;
+    const share = Math.round((numeric(s.saleTotal, 0) / orderTotal) * amount);
+    assigned += share;
+    return share;
+  });
+
+  const finishedAt = order.finishedAt || new Date().toISOString();
+
+  if (useCloud) {
+    try {
+      const userId = await getUserId();
+      for (let i = 0; i < affected.length; i++) {
+        const s = affected[i];
+        const newVal = numeric(s[method.local], 0) + shares[i];
+        const patch = { [method.cloud]: newVal, status: "entregado", finished_at: finishedAt };
+        let { error } = await supabaseClient
+          .from("sales")
+          .update(patch)
+          .eq("user_id", userId)
+          .eq("id", s.id);
+        if (error && /schema cache|could not find/i.test(error.message || "")) {
+          ({ error } = await supabaseClient
+            .from("sales")
+            .update({ [method.cloud]: newVal })
+            .eq("user_id", userId)
+            .eq("id", s.id));
+        }
+        if (error) throw error;
+      }
+    } catch (e) {
+      alert(`No se pudo registrar el cobro: ${e?.message || e}`);
+      return;
+    }
+  }
+
+  affected.forEach((s, i) => {
+    patchCachedSaleAfterEdit(s.id, {
+      [method.local]: numeric(s[method.local], 0) + shares[i],
+      status: "entregado",
+      finishedAt,
+    });
+  });
+
+  closeChargeModal();
+  renderAll();
+}
+
+function bindChargeModalUi() {
+  document.getElementById("charge-modal-close")?.addEventListener("click", closeChargeModal);
+  document.getElementById("charge-modal-backdrop")?.addEventListener("click", closeChargeModal);
+
+  document.querySelectorAll(".charge-method-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      chargeSelectedMethod = btn.dataset.method || null;
+      document.querySelectorAll(".charge-method-btn").forEach((b) => {
+        b.classList.toggle("charge-method-btn--selected", b === btn);
+      });
+      const confirmBtn = document.getElementById("charge-confirm");
+      if (confirmBtn) confirmBtn.disabled = !chargeSelectedMethod;
+    });
+  });
+
+  document.getElementById("charge-confirm")?.addEventListener("click", () => {
+    const confirmBtn = document.getElementById("charge-confirm");
+    if (confirmBtn) confirmBtn.disabled = true;
+    void confirmChargeOrder().finally(() => {
+      if (confirmBtn) confirmBtn.disabled = !chargeSelectedMethod;
+    });
+  });
+}
+
+/* ========== Modo empleado ========== */
+
+const EMPLOYEE_ROLE_KEY = "goatcars_role";
+const EMPLOYEE_PIN_KEY = "goatcars_employee_pin";
+const EMPLOYEE_ALLOWED_TABS = ["ventas", "facturacion", "ayuda"];
+
+function isEmployeeMode() {
+  try {
+    return localStorage.getItem(EMPLOYEE_ROLE_KEY) === "empleado";
+  } catch {
+    return false;
+  }
+}
+
+function applyEmployeeMode() {
+  const on = isEmployeeMode();
+  document.body.classList.toggle("role-empleado", on);
+
+  tabButtons.forEach((btn) => {
+    if (btn.id === "btn-exit-employee") return;
+    const tab = btn.dataset.tab || "";
+    btn.hidden = on && !EMPLOYEE_ALLOWED_TABS.includes(tab);
+  });
+
+  const exitBtn = document.getElementById("btn-exit-employee");
+  if (exitBtn) exitBtn.hidden = !on;
+
+  if (on) {
+    const activeTab = document.querySelector(".sidebar-nav .tab-btn.active")?.dataset.tab || "";
+    if (!EMPLOYEE_ALLOWED_TABS.includes(activeTab)) switchTab("ventas");
+  }
+}
+
+function bindEmployeeModeUi() {
+  document.getElementById("btn-activate-employee")?.addEventListener("click", () => {
+    const pinEl = document.getElementById("employee-pin");
+    const pin = (pinEl?.value || "").trim();
+    if (pin.length < 4) {
+      alert("Poné un PIN de al menos 4 dígitos para poder salir del modo empleado después.");
+      return;
+    }
+    localStorage.setItem(EMPLOYEE_PIN_KEY, pin);
+    localStorage.setItem(EMPLOYEE_ROLE_KEY, "empleado");
+    if (pinEl) pinEl.value = "";
+    applyEmployeeMode();
+    switchTab("ventas");
+    renderAll();
+  });
+
+  document.getElementById("btn-exit-employee")?.addEventListener("click", () => {
+    const saved = localStorage.getItem(EMPLOYEE_PIN_KEY) || "";
+    const typed = prompt("PIN para salir del modo empleado:");
+    if (typed === null) return;
+    if (typed.trim() !== saved) {
+      alert("PIN incorrecto.");
+      return;
+    }
+    localStorage.setItem(EMPLOYEE_ROLE_KEY, "admin");
+    applyEmployeeMode();
+    renderAll();
   });
 }
 
@@ -10281,6 +10677,7 @@ function renderAll() {
   bindViewFilterControls();
   renderSales();
   renderCarQueue();
+  renderQuickCheckinServices();
   renderSellersTable();
   renderSellerStats();
   refreshSaleSellerSelect();
@@ -13431,6 +13828,10 @@ async function initApp() {
   ensureDefaultServicesLocal();
   bindServicesUi();
   bindCarQueueUi();
+  bindQuickCheckinUi();
+  bindChargeModalUi();
+  bindEmployeeModeUi();
+  applyEmployeeMode();
   renderAll();
 
   if (!isCloudConfigured()) {

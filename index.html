@@ -17,7 +17,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="icon" href="./assets/logo.png" type="image/png" />
     <link rel="stylesheet" href="./themes.css?v=2" />
-    <link rel="stylesheet" href="./styles.css?v=3" />
+    <link rel="stylesheet" href="./styles.css?v=4" />
     <script>
       (function () {
         var map = {
@@ -109,6 +109,9 @@
           <button type="button" class="tab-btn" data-tab="configuraciones">Configuraciones</button>
           <div class="sidebar-nav-spacer" aria-hidden="true"></div>
           <button type="button" class="tab-btn tab-btn--support" data-tab="ayuda">Ayuda</button>
+          <button type="button" id="btn-exit-employee" class="tab-btn tab-btn--exit-employee" hidden>
+            Salir modo empleado
+          </button>
         </nav>
       </aside>
 
@@ -485,7 +488,7 @@
                   <span class="section-kpi__hint muted">listos o entregados</span>
                 </article>
               </div>
-              <div class="section-kpi-row section-kpi-row--ventas-basic">
+              <div class="section-kpi-row section-kpi-row--ventas-basic admin-only">
                 <article class="section-kpi">
                   <span class="section-kpi__label">Ventas del mes</span>
                   <strong id="ventas-kpi-total" class="section-kpi__value">0</strong>
@@ -502,7 +505,7 @@
                   <span class="section-kpi__hint muted">líneas del mes</span>
                 </article>
               </div>
-              <article class="ventas-resultado-card" id="ventas-resultado-card">
+              <article class="ventas-resultado-card admin-only" id="ventas-resultado-card">
                 <div class="ventas-resultado-card__main">
                   <div class="ventas-resultado-card__head">
                     <span class="ventas-resultado-card__label">Resultado del mes</span>
@@ -726,18 +729,89 @@
             </div>
           </div>
 
+          <section class="card quick-checkin-card" id="quick-checkin-card">
+            <div class="table-head">
+              <h2>Ingresar auto</h2>
+              <span class="muted">Cargalo en 10 segundos y pasa a la línea de trabajo</span>
+            </div>
+            <form id="quick-checkin-form" class="quick-checkin-form" autocomplete="off">
+              <div class="quick-checkin-fields">
+                <label>
+                  Día
+                  <input id="qc-date" type="date" required />
+                </label>
+                <label>
+                  Marca del auto
+                  <input id="qc-brand" type="text" placeholder="Ej: Toyota" required list="qc-brand-list" />
+                  <datalist id="qc-brand-list">
+                    <option value="Toyota"></option>
+                    <option value="Volkswagen"></option>
+                    <option value="Ford"></option>
+                    <option value="Chevrolet"></option>
+                    <option value="Fiat"></option>
+                    <option value="Renault"></option>
+                    <option value="Peugeot"></option>
+                    <option value="Honda"></option>
+                    <option value="Nissan"></option>
+                    <option value="Jeep"></option>
+                  </datalist>
+                </label>
+                <label>
+                  Patente
+                  <input id="qc-plate" type="text" placeholder="Ej: AB123CD" required class="quick-checkin-plate" />
+                </label>
+              </div>
+              <div class="quick-checkin-services">
+                <span class="quick-checkin-services__label">Servicio</span>
+                <div id="qc-service-options" class="qc-service-options" role="radiogroup" aria-label="Servicio"></div>
+              </div>
+              <button type="submit" id="qc-submit" class="quick-checkin-submit">Ingresar auto →</button>
+              <p id="qc-feedback" class="quick-checkin-feedback" hidden></p>
+            </form>
+          </section>
+
           <section class="card" id="car-queue-card">
             <div class="table-head">
-              <h2>Autos en el lavadero</h2>
+              <h2>Línea de trabajo</h2>
               <span class="muted">Pendientes de cualquier día + entregados de hoy</span>
             </div>
             <div id="car-queue-list" class="car-queue-list" aria-live="polite"></div>
           </section>
 
+          <div
+            id="charge-modal"
+            class="charge-modal"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="charge-modal-title"
+          >
+            <div class="charge-modal__backdrop" id="charge-modal-backdrop" aria-hidden="true"></div>
+            <div class="charge-modal__panel card glass-panel" role="document">
+              <div class="charge-modal__header">
+                <h2 id="charge-modal-title">Cobrar</h2>
+                <button type="button" class="charge-modal__close" id="charge-modal-close" aria-label="Cerrar">×</button>
+              </div>
+              <p class="charge-modal__vehicle" id="charge-modal-vehicle">—</p>
+              <p class="charge-modal__services muted" id="charge-modal-services">—</p>
+              <label class="charge-modal__amount-label">
+                Monto a cobrar
+                <input id="charge-amount" type="number" min="0" step="1" inputmode="numeric" />
+              </label>
+              <div class="charge-methods" role="radiogroup" aria-label="Método de pago">
+                <button type="button" class="charge-method-btn" data-method="efectivo">💵 Efectivo</button>
+                <button type="button" class="charge-method-btn" data-method="transferencia">🏦 Transferencia</button>
+                <button type="button" class="charge-method-btn" data-method="tarjeta">💳 Tarjeta</button>
+                <button type="button" class="charge-method-btn" data-method="otro">✳️ Otro</button>
+              </div>
+              <button type="button" id="charge-confirm" class="charge-confirm" disabled>Confirmar cobro</button>
+            </div>
+          </div>
+
           <section class="card">
             <div class="table-head table-head--filters">
               <h2>Historial de ventas</h2>
-              <button type="button" class="secondary" id="btn-export-sales-csv">Exportar CSV</button>
+              <button type="button" class="secondary admin-only" id="btn-export-sales-csv">Exportar CSV</button>
             </div>
             <div class="view-filter-bar" data-view-filter="sales">
               <span class="view-filter-period view-filter-period--month">Mes: <strong data-view-period-label></strong></span>
@@ -1324,6 +1398,23 @@
             </div>
             <div id="goals-progress" class="goals-progress" aria-live="polite"></div>
           </section>
+
+          <section class="card" id="employee-mode-card">
+            <h2>Vista de empleado</h2>
+            <p class="section-hint">
+              En modo empleado la app solo muestra <strong>Ventas</strong> (ingresar autos, línea de trabajo y cobrar) y
+              <strong>Facturación</strong>. No se ven Caja, Resumen, ingresos ni resultados. Para salir del modo se pide el PIN.
+            </p>
+            <div class="grid">
+              <label>
+                PIN para salir (4 dígitos o más)
+                <input id="employee-pin" type="password" inputmode="numeric" placeholder="Ej: 2580" autocomplete="off" />
+              </label>
+              <div class="form-actions form-actions--inline">
+                <button type="button" id="btn-activate-employee">Activar modo empleado</button>
+              </div>
+            </div>
+          </section>
           </div>
 
           <div
@@ -1753,7 +1844,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="./config.js?v=1"></script>
-    <script src="./app.js?v=3"></script>
+    <script src="./app.js?v=4"></script>
     <script src="./business-extras.js?v=1"></script>
   </body>
 </html>
