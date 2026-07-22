@@ -984,7 +984,9 @@
     const rows = [];
     for (const s of c.getSales()) {
       if (!c.recordInMonth(s.date, mk)) continue;
-      rows.push([s.date, "venta", "reparto", `Venta ${s.client}`, s.saleTotal]);
+      const collected = typeof c.saleCollectedAmount === "function" ? c.saleCollectedAmount(s) : c.numeric(s.saleTotal, 0);
+      if (collected <= 0) continue;
+      rows.push([s.date, "cobro", "reparto", `Cobro ${s.client}`, collected]);
     }
     for (const row of c.getCash()) {
       if (!c.recordInMonth(row.date, mk)) continue;

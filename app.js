@@ -1499,9 +1499,29 @@ function saleTradeInReceivedValue(sale) {
   return numeric(sale?.tradeInValue ?? sale?.trade_in_value, 0);
 }
 
-/** Ganancia contable (cobrado − costo); puede ser negativa con canje. */
+/** Plata realmente cobrada (efectivo + transferencia + tarjeta + otro). */
+function saleCollectedAmount(sale) {
+  if (!sale) return 0;
+  return (
+    numeric(sale.paymentCash ?? sale.payment_cash, 0) +
+    numeric(sale.paymentTransfer ?? sale.payment_transfer, 0) +
+    numeric(sale.paymentCard ?? sale.payment_card, 0) +
+    numeric(sale.paymentOther ?? sale.payment_other, 0)
+  );
+}
+
+function saleIsCollected(sale) {
+  return saleCollectedAmount(sale) > 0.009;
+}
+
+/** Ganancia en caja: solo lo cobrado − costo proporcional. Lavados sin cobro = 0 (no son ingreso). */
 function saleCashMargin(sale) {
-  return numeric(sale?.profit, 0);
+  const collected = saleCollectedAmount(sale);
+  if (collected <= 0.009) return 0;
+  const total = numeric(sale?.saleTotal ?? sale?.sale_total, 0);
+  const cost = numeric(sale?.costTotal ?? sale?.cost_total, 0);
+  if (total <= 0.009) return collected - cost;
+  return collected - cost * (collected / total);
 }
 
 /** Resultado económico: margen en caja + valor del canje recibido a stock. */
@@ -5028,15 +5048,17 @@ function renderCash() {
   const sales = getSales();
   cashBody.innerHTML = "";
 
-  let saleRows = sales.map((s) => ({
-    date: s.date || "",
-    type: "ingreso",
-    concept: `Venta · ${s.client || "—"} · ${s.model || "Equipo"}`,
-    amount: numeric(s.saleTotal, 0),
-    isSale: true,
-    saleId: s.id,
-    repartoDest: "reparto",
-  }));
+  let saleRows = sales
+    .filter((s) => saleIsCollected(s))
+    .map((s) => ({
+      date: s.date || "",
+      type: "ingreso",
+      concept: `Cobro · ${s.client || "—"} · ${s.model || "Servicio"}${s.color ? ` · ${s.color}` : ""}`,
+      amount: saleCollectedAmount(s),
+      isSale: true,
+      saleId: s.id,
+      repartoDest: "reparto",
+    }));
   if (viewLimitsToActiveMonth("cash")) {
     const mk = getDashboardMonthKey();
     saleRows = saleRows.filter((r) => recordInMonth(r.date, mk));
@@ -9658,7 +9680,7 @@ function renderSectionKpis() {
   // ─── Ventas ───
   const monthSales = salesForMonthKey(sales, mk);
   const ventasCount = monthSales.length;
-  const ventasRevenue = monthSales.reduce((a, s) => a + numeric(s.saleTotal, 0), 0);
+  const ventasRevenue = monthSales.reduce((a, s) => a + saleCollectedAmount(s), 0);
   const ventasUnits = monthSales.reduce((a, s) => a + numeric(s.quantity, 1), 0);
   const ventasProfitSummary = summarizeSalesProfit(monthSales);
   const hasCanje = ventasProfitSummary.tradeInReceived > 0;
@@ -9802,7 +9824,7 @@ function renderDashboard() {
   const mk = getDashboardMonthKey();
 
   const salesMonth = salesForMonthKey(sales, mk);
-  const salesTotal = salesMonth.reduce((sum, s) => sum + numeric(s.saleTotal, 0), 0);
+  const salesTotal = salesMonth.reduce((sum, s) => sum + saleCollectedAmount(s), 0);
   const servicesSold = salesMonth.reduce((sum, s) => sum + numeric(s.quantity, 0), 0);
 
   const moneyIn = totalMoneyInForMonth(sales, cash, mk);
@@ -10080,15 +10102,15 @@ function syncCashEgresoKindUi() {
  * Ingresos/egresos con destino fijo van directo al bucket correspondiente.
  */
 function monthProfitForSplit(sales, cash, keyYYYYMM) {
-  const salesTotal = salesForMonthKey(sales, keyYYYYMM).reduce((a, s) => a + numeric(s.saleTotal, 0), 0);
+  const salesTotal = salesForMonthKey(sales, keyYYYYMM).reduce((a, s) => a + saleCollectedAmount(s), 0);
   const repartoCashIn = sumCashIngresosByDestMonth(cash, keyYYYYMM, "reparto");
   const commissions = sumSellerCommissionsForMonth(sales, keyYYYYMM);
   return Math.max(0, salesTotal + repartoCashIn - commissions);
 }
 
-/** Facturación ventas + ingresos de caja del mes. */
+/** Facturación cobrada + ingresos de caja del mes. Lavados sin cobro no cuentan. */
 function totalMoneyInForMonth(sales, cash, keyYYYYMM) {
-  const sv = salesForMonthKey(sales, keyYYYYMM).reduce((a, s) => a + numeric(s.saleTotal, 0), 0);
+  const sv = salesForMonthKey(sales, keyYYYYMM).reduce((a, s) => a + saleCollectedAmount(s), 0);
   return sv + sumCashIngresosMonth(cash, keyYYYYMM);
 }
 
@@ -10486,7 +10508,7 @@ function renderStatsVisual() {
   const focusKey = getDashboardMonthKey();
   const prevKey = monthKeyPrevious(focusKey);
 
-  const sumTot = (arr) => arr.reduce((a, s) => a + numeric(s.saleTotal, 0), 0);
+  const sumTot = (arr) => arr.reduce((a, s) => a + saleCollectedAmount(s), 0);
 
   const cTot = totalMoneyInForMonth(sales, cash, focusKey);
   const pTot = totalMoneyInForMonth(sales, cash, prevKey);
@@ -10550,7 +10572,7 @@ function renderStatsVisual() {
   chartSales.forEach((s) => {
     const day = Number(String(s.date).slice(8, 10));
     if (day >= 1 && day <= dim) {
-      byDay[day] = (byDay[day] || 0) + numeric(s.saleTotal, 0);
+      byDay[day] = (byDay[day] || 0) + saleCollectedAmount(s);
     }
   });
   chartCashIn.forEach((c) => {
