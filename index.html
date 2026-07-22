@@ -17,7 +17,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="icon" href="./assets/logo.png" type="image/png" />
     <link rel="stylesheet" href="./themes.css?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=8" />
+    <link rel="stylesheet" href="./styles.css?v=9" />
     <script>
       (function () {
         var map = {
@@ -486,6 +486,11 @@
                   <strong id="ventas-kpi-hoy-terminados" class="section-kpi__value">0</strong>
                   <span class="section-kpi__hint muted">listos o entregados</span>
                 </article>
+                <article class="section-kpi section-kpi--hoy section-kpi--warn" id="ventas-kpi-pendiente-card" role="button" tabindex="0" title="Ver solo los que faltan cobrar">
+                  <span class="section-kpi__label">Falta cobrar</span>
+                  <strong id="ventas-kpi-pendiente-count" class="section-kpi__value">0</strong>
+                  <span class="section-kpi__hint muted"><span id="ventas-kpi-pendiente-monto">$0</span> pendientes</span>
+                </article>
               </div>
               <div class="section-kpi-row section-kpi-row--ventas-basic admin-only">
                 <article class="section-kpi">
@@ -775,6 +780,7 @@
                 </label>
               </div>
               <p id="qc-client-hint" class="quick-checkin-client-hint muted" hidden></p>
+              <div id="qc-plate-history" class="qc-plate-history" hidden></div>
               <div class="quick-checkin-vehicle-type">
                 <span class="quick-checkin-services__label">Tipo de vehículo</span>
                 <div class="qc-vehicle-type-options" role="radiogroup" aria-label="Tipo de vehículo">
@@ -799,6 +805,12 @@
             <div class="table-head">
               <h2>Línea de trabajo</h2>
               <span class="muted">Pendientes de cualquier día + entregados de hoy</span>
+            </div>
+            <div class="car-queue-filters" role="tablist" aria-label="Filtro de la línea">
+              <button type="button" class="car-queue-filter car-queue-filter--active" data-queue-filter="all">Todos</button>
+              <button type="button" class="car-queue-filter" data-queue-filter="proceso">En proceso</button>
+              <button type="button" class="car-queue-filter" data-queue-filter="impago">Falta cobrar</button>
+              <button type="button" class="car-queue-filter" data-queue-filter="listos">Listos</button>
             </div>
             <div id="car-queue-list" class="car-queue-list" aria-live="polite"></div>
           </section>
@@ -830,6 +842,42 @@
                 <button type="button" class="charge-method-btn" data-method="otro">✳️ Otro</button>
               </div>
               <button type="button" id="charge-confirm" class="charge-confirm" disabled>Confirmar cobro</button>
+            </div>
+          </div>
+
+          <div
+            id="ticket-modal"
+            class="ticket-modal"
+            hidden
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ticket-modal-title"
+          >
+            <div class="ticket-modal__backdrop" id="ticket-modal-backdrop" aria-hidden="true"></div>
+            <div class="ticket-modal__panel card glass-panel" role="document">
+              <div class="ticket-modal__header">
+                <h2 id="ticket-modal-title">Ticket de cobro</h2>
+                <button type="button" class="ticket-modal__close" id="ticket-modal-close" aria-label="Cerrar">×</button>
+              </div>
+              <div id="ticket-print-area" class="ticket-print-area">
+                <div class="ticket-brand">GOAT CARWASH</div>
+                <p class="ticket-meta muted" id="ticket-datetime">—</p>
+                <div class="ticket-row"><span>Cliente</span><strong id="ticket-client">—</strong></div>
+                <div class="ticket-row"><span>Patente</span><strong id="ticket-plate">—</strong></div>
+                <div class="ticket-row"><span>Vehículo</span><strong id="ticket-vehicle">—</strong></div>
+                <div class="ticket-row"><span>Servicio</span><strong id="ticket-services">—</strong></div>
+                <div class="ticket-row"><span>Pago</span><strong id="ticket-method">—</strong></div>
+                <div class="ticket-total">
+                  <span>Total cobrado</span>
+                  <strong id="ticket-amount">$0</strong>
+                </div>
+                <p class="ticket-thanks muted">¡Gracias por elegirnos!</p>
+              </div>
+              <div class="ticket-actions">
+                <button type="button" class="secondary" id="ticket-print">Imprimir</button>
+                <button type="button" id="ticket-whatsapp">Enviar por WhatsApp</button>
+                <button type="button" class="secondary" id="ticket-done">Listo</button>
+              </div>
             </div>
           </div>
 
@@ -1971,7 +2019,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="./config.js?v=1"></script>
-    <script src="./app.js?v=9"></script>
+    <script src="./app.js?v=10"></script>
     <script src="./business-extras.js?v=2"></script>
   </body>
 </html>

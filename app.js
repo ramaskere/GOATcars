@@ -3128,6 +3128,39 @@ function normalizePhoneDigits(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
 
+/** Número listo para wa.me (Argentina: antepone 54 si falta). */
+function phoneToWhatsAppNumber(phone) {
+  let d = normalizePhoneDigits(phone);
+  if (!d || d.length < 8) return "";
+  if (d.startsWith("0")) d = d.slice(1);
+  if (!d.startsWith("54")) d = `54${d}`;
+  return d;
+}
+
+function openWhatsAppMessage(phone, text) {
+  const num = phoneToWhatsAppNumber(phone);
+  if (!num) {
+    alert("Este auto no tiene un teléfono válido para WhatsApp.");
+    return false;
+  }
+  const url = `https://wa.me/${num}?text=${encodeURIComponent(text)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+  return true;
+}
+
+function buildWhatsAppReadyMessage(order) {
+  const plate = order.plate || "tu vehículo";
+  const name = order.client && order.client !== order.plate ? ` ${order.client}` : "";
+  return `Hola${name}! Tu auto ${plate} ya está listo en GOAT CARWASH. Te esperamos 🙌`;
+}
+
+function buildWhatsAppUnpaidMessage(order) {
+  const plate = order.plate || "tu vehículo";
+  const due = Math.max(0, numeric(order.total, 0) - numeric(order.paid, 0));
+  const services = (order.services || []).map((s) => s.name).filter(Boolean).join(", ") || "lavado";
+  return `Hola! Te recordamos el lavado de ${plate} (${services}) en GOAT CARWASH. Saldo pendiente: ${currency(due)}.`;
+}
+
 /** Mismo criterio que en pipeline: @usuario → usuario en minúsculas. */
 function normalizeIgHandle(ig) {
   return String(ig || "")
@@ -3833,6 +3866,7 @@ function getCarQueueOrders() {
         firstSaleId: sale.id,
         date: sale.date || "",
         client: sale.client || "",
+        phone: sale.phone || "",
         plate: sale.color || "",
         brand: sale.storage || "",
         vehicleModel: sale.battery || "",
@@ -3846,6 +3880,8 @@ function getCarQueueOrders() {
       });
     }
     const g = groups.get(key);
+    if (!g.phone && sale.phone) g.phone = sale.phone;
+    if ((!g.client || g.client === g.plate) && sale.client) g.client = sale.client;
     g.services.push({ name: sale.model || "Servicio", qty: numeric(sale.quantity, 1) });
     g.total += numeric(sale.saleTotal, 0);
     g.paid +=
@@ -3870,6 +3906,17 @@ function orderIsPaid(order) {
   return order.total > 0 ? order.paid >= order.total - 0.01 : order.paid > 0;
 }
 
+let carQueueFilter = "all"; // all | proceso | impago | listos
+let lastTicketData = null;
+
+function setCarQueueFilter(filter) {
+  carQueueFilter = ["all", "proceso", "impago", "listos"].includes(filter) ? filter : "all";
+  document.querySelectorAll(".car-queue-filter").forEach((btn) => {
+    btn.classList.toggle("car-queue-filter--active", btn.dataset.queueFilter === carQueueFilter);
+  });
+  renderCarQueue();
+}
+
 function renderCarQueue() {
   const listEl = document.getElementById("car-queue-list");
   const orders = getCarQueueOrders();
@@ -3878,18 +3925,25 @@ function renderCarQueue() {
   const ingresadosHoy = orders.filter((o) => o.date === today).length;
   const enProceso = orders.filter((o) => o.status === "en_proceso").length;
   const terminadosHoy = orders.filter((o) => o.date === today && o.status !== "en_proceso").length;
+  const unpaid = orders.filter((o) => !orderIsPaid(o));
+  const unpaidTotal = unpaid.reduce((a, o) => a + Math.max(0, o.total - o.paid), 0);
 
   const kIn = document.getElementById("ventas-kpi-hoy-ingresados");
   const kProc = document.getElementById("ventas-kpi-hoy-proceso");
   const kFin = document.getElementById("ventas-kpi-hoy-terminados");
+  const kPendCount = document.getElementById("ventas-kpi-pendiente-count");
+  const kPendMonto = document.getElementById("ventas-kpi-pendiente-monto");
   if (kIn) kIn.textContent = String(ingresadosHoy);
   if (kProc) kProc.textContent = String(enProceso);
   if (kFin) kFin.textContent = String(terminadosHoy);
+  if (kPendCount) kPendCount.textContent = String(unpaid.length);
+  if (kPendMonto) kPendMonto.textContent = currency(unpaidTotal);
+  document.getElementById("ventas-kpi-pendiente-card")?.classList.toggle("section-kpi--has-debt", unpaid.length > 0);
 
   if (!listEl) return;
 
-  // En la cola: todo lo pendiente (de cualquier día, para no perder autos) + lo de hoy ya cerrado.
-  const visible = orders
+  // En la cola: todo lo pendiente (de cualquier día) + lo de hoy ya cerrado.
+  let visible = orders
     .filter((o) => o.status !== "entregado" || o.date === today)
     .sort((a, b) => {
       const diff = SALE_STATUS_FLOW.indexOf(a.status) - SALE_STATUS_FLOW.indexOf(b.status);
@@ -3897,15 +3951,26 @@ function renderCarQueue() {
       return String(b.date).localeCompare(String(a.date));
     });
 
+  if (carQueueFilter === "proceso") visible = visible.filter((o) => o.status === "en_proceso");
+  else if (carQueueFilter === "impago") visible = visible.filter((o) => !orderIsPaid(o));
+  else if (carQueueFilter === "listos")
+    visible = visible.filter((o) => o.status === "terminado" || (o.status === "entregado" && orderIsPaid(o)));
+
   listEl.innerHTML = "";
   if (visible.length === 0) {
-    listEl.innerHTML = `<p class="muted car-queue__empty">Sin autos en el lavadero. Cargá uno con el formulario “Ingresar auto”.</p>`;
+    const emptyMsg =
+      carQueueFilter === "impago"
+        ? "No hay autos con cobro pendiente."
+        : carQueueFilter === "proceso"
+          ? "No hay autos en proceso."
+          : "Sin autos en el lavadero. Cargá uno con el formulario “Ingresar auto”.";
+    listEl.innerHTML = `<p class="muted car-queue__empty">${emptyMsg}</p>`;
     return;
   }
 
   visible.forEach((o) => {
     const card = document.createElement("article");
-    card.className = `car-queue-card car-queue-card--${o.status}`;
+    card.className = `car-queue-card car-queue-card--${o.status}${!orderIsPaid(o) ? " car-queue-card--impago" : ""}`;
     const vehicleLine = [o.brand, o.vehicleModel, vehicleTypeLabel(o.vehicleType)].filter(Boolean).join(" · ");
     const servicesLine = o.services
       .map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${escapeHtml(s.name)}`)
@@ -3925,6 +3990,21 @@ function renderCarQueue() {
     } else {
       actionHtml = `<span class="car-queue-card__done">✓ Entregado</span>`;
     }
+
+    const waBtns = [];
+    if (o.phone) {
+      if (o.status === "terminado" || o.status === "entregado") {
+        waBtns.push(
+          `<button type="button" class="car-queue-wa-btn queue-wa-btn" data-key="${escapeHtml(o.key)}" data-wa="listo" title="Avisar por WhatsApp">WhatsApp: listo</button>`
+        );
+      }
+      if (!paid) {
+        waBtns.push(
+          `<button type="button" class="car-queue-wa-btn car-queue-wa-btn--debt queue-wa-btn" data-key="${escapeHtml(o.key)}" data-wa="cobro" title="Recordar cobro por WhatsApp">WhatsApp: cobrar</button>`
+        );
+      }
+    }
+
     card.innerHTML = `
       <div class="car-queue-card__top">
         <strong class="car-queue-card__plate">${escapeHtml(o.plate || "Sin patente")}</strong>
@@ -3939,6 +4019,7 @@ function renderCarQueue() {
         ${isOldPending ? `<span class="car-queue-card__late">Ingresó el ${escapeHtml(o.date)}</span>` : ""}
         ${actionHtml}
       </div>
+      ${waBtns.length ? `<div class="car-queue-card__wa">${waBtns.join("")}</div>` : ""}
     `;
     listEl.appendChild(card);
   });
@@ -3995,10 +4076,37 @@ function bindCarQueueUi() {
       openChargeModal(chargeBtn.dataset.key || "");
       return;
     }
+    const waBtn = target.closest(".queue-wa-btn");
+    if (waBtn) {
+      const order = getCarQueueOrders().find((o) => o.key === waBtn.dataset.key);
+      if (!order) return;
+      const msg =
+        waBtn.dataset.wa === "cobro" ? buildWhatsAppUnpaidMessage(order) : buildWhatsAppReadyMessage(order);
+      openWhatsAppMessage(order.phone, msg);
+      return;
+    }
     const btn = target.closest(".queue-status-btn");
     if (!btn) return;
     btn.disabled = true;
     void setCarOrderStatus(btn.dataset.key || "", btn.dataset.next || "");
+  });
+
+  document.querySelector(".car-queue-filters")?.addEventListener("click", (event) => {
+    const btn = event.target instanceof HTMLElement ? event.target.closest(".car-queue-filter") : null;
+    if (!btn) return;
+    setCarQueueFilter(btn.dataset.queueFilter || "all");
+  });
+
+  const pendCard = document.getElementById("ventas-kpi-pendiente-card");
+  pendCard?.addEventListener("click", () => {
+    setCarQueueFilter("impago");
+    document.getElementById("car-queue-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  pendCard?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      pendCard.click();
+    }
   });
 }
 
@@ -4264,6 +4372,61 @@ function findPlateHistory(plate) {
   return matches[0] || null;
 }
 
+function getPlateVisits(plate) {
+  const p = String(plate || "").toUpperCase().replace(/\s+/g, "");
+  if (!p) return [];
+  return getSales()
+    .filter((s) => String(s.color || "").toUpperCase().replace(/\s+/g, "") === p)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+}
+
+function getPlateOpenDebt(plate) {
+  const p = String(plate || "").toUpperCase().replace(/\s+/g, "");
+  if (!p) return { count: 0, amount: 0 };
+  const unpaid = getCarQueueOrders().filter(
+    (o) => String(o.plate || "").toUpperCase().replace(/\s+/g, "") === p && !orderIsPaid(o)
+  );
+  return {
+    count: unpaid.length,
+    amount: unpaid.reduce((a, o) => a + Math.max(0, o.total - o.paid), 0),
+  };
+}
+
+function renderPlateHistoryPanel(plate) {
+  const panel = document.getElementById("qc-plate-history");
+  if (!panel) return;
+  const p = String(plate || "").toUpperCase().replace(/\s+/g, "");
+  if (!p) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+    return;
+  }
+  const visits = getPlateVisits(p);
+  if (!visits.length) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+    return;
+  }
+  const debt = getPlateOpenDebt(p);
+  const last5 = visits.slice(0, 5);
+  const rows = last5
+    .map((s) => {
+      const collected = saleCollectedAmount(s);
+      const paid = collected >= numeric(s.saleTotal, 0) - 0.01 && collected > 0;
+      return `<li><span>${escapeHtml(s.date || "—")} · ${escapeHtml(s.model || "Servicio")} · ${escapeHtml(vehicleTypeLabel(s.imei))}</span><span class="${paid ? "qc-hist-paid" : "qc-hist-debt"}">${paid ? currency(collected) : "Sin cobro"}</span></li>`;
+    })
+    .join("");
+  panel.innerHTML = `
+    <div class="qc-plate-history__head">
+      <strong>Historial ${escapeHtml(p)}</strong>
+      <span class="muted">${visits.length} visita${visits.length === 1 ? "" : "s"}</span>
+    </div>
+    ${debt.amount > 0 ? `<p class="qc-plate-history__debt">Debe ${currency(debt.amount)} (${debt.count} pendiente${debt.count === 1 ? "" : "s"})</p>` : `<p class="qc-plate-history__ok">Sin deudas abiertas</p>`}
+    <ul class="qc-plate-history__list">${rows}</ul>
+  `;
+  panel.hidden = false;
+}
+
 function refreshQcSellerSelect() {
   const sel = document.getElementById("qc-seller");
   if (!sel) return;
@@ -4452,6 +4615,7 @@ async function saveQuickCheckin() {
   if (nameEl) nameEl.value = "";
   const hintEl = document.getElementById("qc-client-hint");
   if (hintEl) hintEl.hidden = true;
+  renderPlateHistoryPanel("");
   qcSelectedServiceId = null;
 
   const feedback = document.getElementById("qc-feedback");
@@ -4499,10 +4663,12 @@ function bindQuickCheckinUi() {
         hintEl.classList.remove("quick-checkin-client-hint--warn");
         hintEl.hidden = false;
       }
+      renderPlateHistoryPanel(plate);
     } else if (hintEl) {
       hintEl.textContent = `Patente nueva: cargá un teléfono para poder contactar al cliente.`;
       hintEl.classList.add("quick-checkin-client-hint--warn");
       hintEl.hidden = false;
+      renderPlateHistoryPanel("");
     }
   });
 
@@ -4646,8 +4812,90 @@ async function confirmChargeOrder() {
     });
   });
 
+  const methodLabels = {
+    efectivo: "Efectivo",
+    transferencia: "Transferencia",
+    tarjeta: "Tarjeta",
+    otro: "Otro",
+  };
+  lastTicketData = {
+    phone: order.phone || affected.find((s) => s.phone)?.phone || "",
+    client: order.client || affected[0]?.client || order.plate || "—",
+    plate: order.plate || "—",
+    vehicle: [order.brand, vehicleTypeLabel(order.vehicleType)].filter(Boolean).join(" · ") || "—",
+    services: order.services.map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${s.name}`).join(" + ") || "—",
+    method: methodLabels[chargeSelectedMethod] || chargeSelectedMethod || "—",
+    amount,
+    datetime: new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }),
+  };
+
   closeChargeModal();
   renderAll();
+  openTicketModal(lastTicketData);
+}
+
+function openTicketModal(data) {
+  if (!data) return;
+  lastTicketData = data;
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  set("ticket-datetime", data.datetime || "—");
+  set("ticket-client", data.client || "—");
+  set("ticket-plate", data.plate || "—");
+  set("ticket-vehicle", data.vehicle || "—");
+  set("ticket-services", data.services || "—");
+  set("ticket-method", data.method || "—");
+  set("ticket-amount", currency(numeric(data.amount, 0)));
+  const modal = document.getElementById("ticket-modal");
+  if (modal) {
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+  }
+}
+
+function closeTicketModal() {
+  const modal = document.getElementById("ticket-modal");
+  if (modal) {
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+  }
+}
+
+function buildTicketWhatsAppText(data) {
+  return [
+    "GOAT CARWASH — Ticket de cobro",
+    `Fecha: ${data.datetime}`,
+    `Cliente: ${data.client}`,
+    `Patente: ${data.plate}`,
+    `Vehículo: ${data.vehicle}`,
+    `Servicio: ${data.services}`,
+    `Pago: ${data.method}`,
+    `Total: ${currency(numeric(data.amount, 0))}`,
+    "¡Gracias por elegirnos!",
+  ].join("\n");
+}
+
+function bindTicketModalUi() {
+  document.getElementById("ticket-modal-close")?.addEventListener("click", closeTicketModal);
+  document.getElementById("ticket-modal-backdrop")?.addEventListener("click", closeTicketModal);
+  document.getElementById("ticket-done")?.addEventListener("click", closeTicketModal);
+  document.getElementById("ticket-print")?.addEventListener("click", () => {
+    document.body.classList.add("printing-ticket");
+    window.print();
+    setTimeout(() => document.body.classList.remove("printing-ticket"), 300);
+  });
+  document.getElementById("ticket-whatsapp")?.addEventListener("click", () => {
+    if (!lastTicketData) return;
+    const text = buildTicketWhatsAppText(lastTicketData);
+    if (lastTicketData.phone) {
+      openWhatsAppMessage(lastTicketData.phone, text);
+    } else {
+      // Sin teléfono: abre WhatsApp Web/app para elegir contacto, con el texto listo.
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+    }
+  });
 }
 
 function bindChargeModalUi() {
@@ -14298,6 +14546,7 @@ async function initApp() {
   bindCarQueueUi();
   bindQuickCheckinUi();
   bindChargeModalUi();
+  bindTicketModalUi();
   bindSimpleEditUi();
   bindEmployeeModeUi();
   applyEmployeeMode();
