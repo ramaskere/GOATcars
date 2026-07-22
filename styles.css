@@ -8504,7 +8504,7 @@ button.linkish:hover {
   letter-spacing: -0.02em;
 }
 
-html[data-theme="goat"] button:not(.secondary):not(.delete-btn):not(.linkish):not(.header-icon-btn):not(.sale-modal__close):not(.tab-btn):not(.config-subnav-tab):not(.resumen-alerts-toggle):not(.car-queue-card__action):not(.qc-service-btn):not(.charge-method-btn):not(.charge-modal__close),
+html[data-theme="goat"] button:not(.secondary):not(.delete-btn):not(.linkish):not(.header-icon-btn):not(.sale-modal__close):not(.tab-btn):not(.config-subnav-tab):not(.resumen-alerts-toggle):not(.car-queue-card__action):not(.qc-service-btn):not(.qc-vehicle-type-btn):not(.charge-method-btn):not(.charge-modal__close),
 html[data-theme="goat"] .ventas-btn-nueva,
 html[data-theme="goat"] .auth-form button[type="submit"] {
   color: #0a0a0a;
@@ -8854,4 +8854,28 @@ body.role-empleado #tab-ventas table td:nth-child(8) {
 }
 .simple-edit-pay {
   margin-top: 4px;
+}
+
+.quick-checkin-vehicle-type {
+  margin-top: 2px;
+}
+.qc-vehicle-type-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.qc-vehicle-type-btn {
+  padding: 14px 10px;
+  border-radius: 14px;
+  border: 2px solid #d7dcea;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 800;
+}
+.qc-vehicle-type-btn--selected {
+  border-color: #9acc00;
+  background: rgba(198, 255, 0, 0.18);
+  box-shadow: 0 0 0 2px rgba(154, 204, 0, 0.3);
 }

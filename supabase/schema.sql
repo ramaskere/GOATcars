@@ -12,6 +12,7 @@ create table if not exists public.services (
   user_id uuid not null references auth.users (id) on delete cascade,
   name text not null,
   price numeric not null default 0 check (price >= 0),
+  price_camioneta numeric not null default 0 check (price_camioneta >= 0),
   cost numeric not null default 0 check (cost >= 0),
   active boolean not null default true,
   notes text not null default '',

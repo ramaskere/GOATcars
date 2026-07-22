@@ -2771,10 +2771,14 @@ function getInventory() {
 
 function normalizeService(s) {
   if (!s) return s;
+  const price = numeric(s.price, 0);
+  // Si no hay precio camioneta, usa el de auto (compatibilidad con catálogo viejo).
+  const priceCamioneta = numeric(s.priceCamioneta ?? s.price_camioneta, price);
   return {
     id: s.id,
     name: String(s.name || "").trim(),
-    price: numeric(s.price, 0),
+    price,
+    priceCamioneta,
     cost: numeric(s.cost, 0),
     active: s.active !== false,
     notes: String(s.notes || "").trim(),
@@ -2788,12 +2792,30 @@ function serviceFromRow(row) {
     id: row.id,
     name: row.name,
     price: row.price,
+    price_camioneta: row.price_camioneta,
     cost: row.cost,
     active: row.active,
     notes: row.notes,
     created_at: row.created_at,
     updated_at: row.updated_at,
   });
+}
+
+function normalizeVehicleType(value) {
+  const v = String(value || "").trim().toLowerCase();
+  return v === "camioneta" ? "camioneta" : "auto";
+}
+
+function vehicleTypeLabel(value) {
+  return normalizeVehicleType(value) === "camioneta" ? "Camioneta" : "Auto";
+}
+
+/** Precio del servicio según tipo de vehículo (auto / camioneta). */
+function servicePriceForType(svc, vehicleType) {
+  if (!svc) return 0;
+  return normalizeVehicleType(vehicleType) === "camioneta"
+    ? numeric(svc.priceCamioneta, numeric(svc.price, 0))
+    : numeric(svc.price, 0);
 }
 
 function getServices() {
@@ -2806,10 +2828,10 @@ function ensureDefaultServicesLocal() {
   const list = readList(KEYS.services);
   if (Array.isArray(list) && list.length > 0) return;
   const seed = [
-    { id: crypto.randomUUID(), name: "Lavado básico", price: 8000, cost: 500, active: true, notes: "" },
-    { id: crypto.randomUUID(), name: "Lavado full", price: 15000, cost: 1200, active: true, notes: "" },
-    { id: crypto.randomUUID(), name: "Detailing interior", price: 25000, cost: 3000, active: true, notes: "" },
-    { id: crypto.randomUUID(), name: "Encerado", price: 12000, cost: 1500, active: true, notes: "" },
+    { id: crypto.randomUUID(), name: "Lavado básico", price: 8000, priceCamioneta: 10000, cost: 500, active: true, notes: "" },
+    { id: crypto.randomUUID(), name: "Lavado full", price: 15000, priceCamioneta: 18000, cost: 1200, active: true, notes: "" },
+    { id: crypto.randomUUID(), name: "Detailing interior", price: 25000, priceCamioneta: 30000, cost: 3000, active: true, notes: "" },
+    { id: crypto.randomUUID(), name: "Encerado", price: 12000, priceCamioneta: 15000, cost: 1500, active: true, notes: "" },
   ];
   writeList(KEYS.services, seed);
   cacheServices = seed;
@@ -2827,7 +2849,7 @@ function renderServices() {
   body.innerHTML = "";
   if (!list.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6" class="muted">Sin servicios. Tocá «+ Servicio» o se cargan ejemplos al iniciar en local.</td>`;
+    tr.innerHTML = `<td colspan="7" class="muted">Sin servicios. Tocá «+ Servicio» o se cargan ejemplos al iniciar en local.</td>`;
     body.appendChild(tr);
     return;
   }
@@ -2836,6 +2858,7 @@ function renderServices() {
     tr.innerHTML = `
       <td>${escapeHtml(s.name)}</td>
       <td>${currency(s.price)}</td>
+      <td>${currency(s.priceCamioneta)}</td>
       <td>${currency(s.cost)}</td>
       <td>${s.active !== false ? "Activo" : "Inactivo"}</td>
       <td class="muted">${escapeHtml(s.notes || "—")}</td>
@@ -2854,6 +2877,7 @@ function openServiceModal(editId) {
   const title = document.getElementById("service-modal-title");
   const nameEl = document.getElementById("service-name");
   const priceEl = document.getElementById("service-price");
+  const priceCamEl = document.getElementById("service-price-camioneta");
   const costEl = document.getElementById("service-cost");
   const notesEl = document.getElementById("service-notes");
   const activeEl = document.getElementById("service-active");
@@ -2863,6 +2887,7 @@ function openServiceModal(editId) {
     if (title) title.textContent = "Editar servicio";
     if (nameEl) nameEl.value = s.name;
     if (priceEl) priceEl.value = String(s.price);
+    if (priceCamEl) priceCamEl.value = String(s.priceCamioneta);
     if (costEl) costEl.value = String(s.cost);
     if (notesEl) notesEl.value = s.notes || "";
     if (activeEl) activeEl.checked = s.active !== false;
@@ -2870,6 +2895,7 @@ function openServiceModal(editId) {
     if (title) title.textContent = "Nuevo servicio";
     if (nameEl) nameEl.value = "";
     if (priceEl) priceEl.value = "0";
+    if (priceCamEl) priceCamEl.value = "0";
     if (costEl) costEl.value = "0";
     if (notesEl) notesEl.value = "";
     if (activeEl) activeEl.checked = true;
@@ -2890,6 +2916,7 @@ async function saveServiceFromForm(event) {
   event.preventDefault();
   const name = (document.getElementById("service-name")?.value || "").trim();
   const price = numeric(document.getElementById("service-price")?.value, 0);
+  const priceCamioneta = numeric(document.getElementById("service-price-camioneta")?.value, price);
   const cost = numeric(document.getElementById("service-cost")?.value, 0);
   const notes = (document.getElementById("service-notes")?.value || "").trim();
   const active = Boolean(document.getElementById("service-active")?.checked);
@@ -2900,22 +2927,50 @@ async function saveServiceFromForm(event) {
   if (useCloud) {
     try {
       const userId = await getUserId();
+      const payload = {
+        name,
+        price,
+        price_camioneta: priceCamioneta,
+        cost,
+        notes,
+        active,
+        updated_at: new Date().toISOString(),
+      };
       if (editingServiceId) {
-        const { error } = await supabaseClient
+        let { error } = await supabaseClient
           .from("services")
-          .update({ name, price, cost, notes, active, updated_at: new Date().toISOString() })
+          .update(payload)
           .eq("id", editingServiceId)
           .eq("user_id", userId);
+        if (error && /schema cache|could not find|price_camioneta/i.test(error.message || "")) {
+          const { price_camioneta: _omit, ...legacy } = payload;
+          ({ error } = await supabaseClient
+            .from("services")
+            .update(legacy)
+            .eq("id", editingServiceId)
+            .eq("user_id", userId));
+        }
         if (error) throw error;
       } else {
-        const { error } = await supabaseClient.from("services").insert({
+        let { error } = await supabaseClient.from("services").insert({
           user_id: userId,
           name,
           price,
+          price_camioneta: priceCamioneta,
           cost,
           notes,
           active,
         });
+        if (error && /schema cache|could not find|price_camioneta/i.test(error.message || "")) {
+          ({ error } = await supabaseClient.from("services").insert({
+            user_id: userId,
+            name,
+            price,
+            cost,
+            notes,
+            active,
+          }));
+        }
         if (error) throw error;
       }
     } catch (e) {
@@ -2927,10 +2982,10 @@ async function saveServiceFromForm(event) {
     if (editingServiceId) {
       const idx = list.findIndex((x) => String(x.id) === String(editingServiceId));
       if (idx >= 0) {
-        list[idx] = { ...list[idx], name, price, cost, notes, active };
+        list[idx] = { ...list[idx], name, price, priceCamioneta, cost, notes, active };
       }
     } else {
-      list.unshift({ id: crypto.randomUUID(), name, price, cost, notes, active });
+      list.unshift({ id: crypto.randomUUID(), name, price, priceCamioneta, cost, notes, active });
     }
     writeList(KEYS.services, list);
     cacheServices = list.map(normalizeService);
@@ -3831,7 +3886,7 @@ function renderCarQueue() {
   visible.forEach((o) => {
     const card = document.createElement("article");
     card.className = `car-queue-card car-queue-card--${o.status}`;
-    const vehicleLine = [o.brand, o.vehicleModel, o.vehicleType].filter(Boolean).join(" · ");
+    const vehicleLine = [o.brand, o.vehicleModel, vehicleTypeLabel(o.vehicleType)].filter(Boolean).join(" · ");
     const servicesLine = o.services
       .map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${escapeHtml(s.name)}`)
       .join(" + ");
@@ -3945,6 +4000,7 @@ function openSimpleEditModal(saleId) {
   set("se-phone", sale.phone || "");
   set("se-brand", sale.storage || "");
   set("se-plate", sale.color || "");
+  set("se-vehicle-type", normalizeVehicleType(sale.imei));
   set("se-price", String(numeric(sale.unitSale, 0)));
   set("se-status", normalizeSaleStatus(sale.status));
   set("se-pay-cash", String(numeric(sale.paymentCash, 0)));
@@ -3959,12 +4015,13 @@ function openSimpleEditModal(saleId) {
     cur.value = "";
     cur.textContent = `${sale.model || "Servicio"} (actual)`;
     svcSel.appendChild(cur);
+    const vehicleType = normalizeVehicleType(sale.imei);
     getServices()
       .filter((s) => s.active !== false)
       .forEach((svc) => {
         const o = document.createElement("option");
         o.value = String(svc.id);
-        o.textContent = `${svc.name} — ${currency(numeric(svc.price, 0))}`;
+        o.textContent = `${svc.name} — ${currency(servicePriceForType(svc, vehicleType))}`;
         svcSel.appendChild(o);
       });
     svcSel.value = "";
@@ -4016,6 +4073,7 @@ async function saveSimpleEdit() {
   const brand = val("se-brand").trim();
   const plate = val("se-plate").trim().toUpperCase().replace(/\s+/g, "");
   if (!plate) return alert("Falta la patente.");
+  const vehicleType = normalizeVehicleType(val("se-vehicle-type"));
 
   const svcSel = document.getElementById("se-service");
   const svc = getServices().find((s) => String(s.id) === String(svcSel?.value || ""));
@@ -4050,6 +4108,7 @@ async function saveSimpleEdit() {
         service_name: serviceName,
         vehicle_plate: plate,
         vehicle_brand: brand,
+        vehicle_type: vehicleType,
         unit_sale: unitSale,
         unit_cost: unitCost,
         sale_total: saleTotal,
@@ -4095,6 +4154,7 @@ async function saveSimpleEdit() {
     model: serviceName,
     color: plate,
     storage: brand,
+    imei: vehicleType,
     unitSale,
     unitCost,
     saleTotal,
@@ -4115,19 +4175,47 @@ async function saveSimpleEdit() {
   renderAll();
 }
 
+function refreshSimpleEditServiceOptions() {
+  const svcSel = document.getElementById("se-service");
+  if (!svcSel) return;
+  const vehicleType = normalizeVehicleType(document.getElementById("se-vehicle-type")?.value);
+  const prev = svcSel.value;
+  const currentLabel = svcSel.options[0]?.textContent || "Servicio (actual)";
+  svcSel.innerHTML = "";
+  const cur = document.createElement("option");
+  cur.value = "";
+  cur.textContent = currentLabel.includes("(actual)") ? currentLabel : `${currentLabel} (actual)`;
+  svcSel.appendChild(cur);
+  getServices()
+    .filter((s) => s.active !== false)
+    .forEach((svc) => {
+      const o = document.createElement("option");
+      o.value = String(svc.id);
+      o.textContent = `${svc.name} — ${currency(servicePriceForType(svc, vehicleType))}`;
+      svcSel.appendChild(o);
+    });
+  if ([...svcSel.options].some((o) => o.value === prev)) svcSel.value = prev;
+}
+
+function applySimpleEditServicePrice() {
+  const vehicleType = normalizeVehicleType(document.getElementById("se-vehicle-type")?.value);
+  const svc = getServices().find(
+    (s) => String(s.id) === String(document.getElementById("se-service")?.value || "")
+  );
+  if (!svc) return;
+  const priceEl = document.getElementById("se-price");
+  if (priceEl) priceEl.value = String(servicePriceForType(svc, vehicleType));
+}
+
 function bindSimpleEditUi() {
   document.getElementById("simple-edit-close")?.addEventListener("click", closeSimpleEditModal);
   document.getElementById("simple-edit-cancel")?.addEventListener("click", closeSimpleEditModal);
   document.getElementById("simple-edit-backdrop")?.addEventListener("click", closeSimpleEditModal);
 
-  document.getElementById("se-service")?.addEventListener("change", () => {
-    const svc = getServices().find(
-      (s) => String(s.id) === String(document.getElementById("se-service")?.value || "")
-    );
-    if (svc) {
-      const priceEl = document.getElementById("se-price");
-      if (priceEl) priceEl.value = String(numeric(svc.price, 0));
-    }
+  document.getElementById("se-service")?.addEventListener("change", applySimpleEditServicePrice);
+  document.getElementById("se-vehicle-type")?.addEventListener("change", () => {
+    refreshSimpleEditServiceOptions();
+    applySimpleEditServicePrice();
   });
 
   const plateEl = document.getElementById("se-plate");
@@ -4144,6 +4232,7 @@ function bindSimpleEditUi() {
 /* ========== Ingreso rápido de autos ========== */
 
 let qcSelectedServiceId = null;
+let qcVehicleType = "auto";
 
 /** Última venta registrada para una patente (para autocompletar cliente y validar teléfono). */
 function findPlateHistory(plate) {
@@ -4176,6 +4265,18 @@ function refreshQcSellerSelect() {
   if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
 }
 
+function setQcVehicleType(type) {
+  qcVehicleType = normalizeVehicleType(type);
+  document.querySelectorAll(".qc-vehicle-type-btn").forEach((btn) => {
+    const selected = btn.dataset.vehicleType === qcVehicleType;
+    btn.classList.toggle("qc-vehicle-type-btn--selected", selected);
+    btn.setAttribute("aria-checked", selected ? "true" : "false");
+  });
+  const hint = document.getElementById("qc-price-hint");
+  if (hint) hint.textContent = `(precio ${vehicleTypeLabel(qcVehicleType).toLowerCase()})`;
+  renderQuickCheckinServices();
+}
+
 function renderQuickCheckinServices() {
   const wrap = document.getElementById("qc-service-options");
   if (!wrap) return;
@@ -4196,7 +4297,8 @@ function renderQuickCheckinServices() {
     const selected = String(svc.id) === String(qcSelectedServiceId);
     btn.setAttribute("aria-checked", selected ? "true" : "false");
     if (selected) btn.classList.add("qc-service-btn--selected");
-    btn.innerHTML = `<span class="qc-service-btn__name">${escapeHtml(svc.name)}</span><span class="qc-service-btn__price">${currency(numeric(svc.price, 0))}</span>`;
+    const price = servicePriceForType(svc, qcVehicleType);
+    btn.innerHTML = `<span class="qc-service-btn__name">${escapeHtml(svc.name)}</span><span class="qc-service-btn__price">${currency(price)}</span>`;
     wrap.appendChild(btn);
   });
 }
@@ -4229,8 +4331,9 @@ async function saveQuickCheckin() {
   const phone = phoneTyped || historyPhone;
   const historyName = history && history.client !== history.color ? history.client : "";
   const clientName = nameTyped || historyName || plate;
+  const vehicleType = normalizeVehicleType(qcVehicleType);
 
-  const price = numeric(service.price, 0);
+  const price = servicePriceForType(service, vehicleType);
   const cost = numeric(service.cost, 0);
   const sellerSel = document.getElementById("qc-seller");
   const comm = computeSaleCommission(sellerSel?.value || null, price);
@@ -4250,7 +4353,7 @@ async function saveQuickCheckin() {
         vehicle_plate: plate,
         vehicle_brand: brand,
         vehicle_model: "",
-        vehicle_type: "",
+        vehicle_type: vehicleType,
         quantity: 1,
         unit_sale: price,
         unit_cost: cost,
@@ -4299,7 +4402,7 @@ async function saveQuickCheckin() {
       color: plate,
       storage: brand,
       battery: "",
-      imei: "",
+      imei: vehicleType,
       quantity: 1,
       unitSale: price,
       unitCost: cost,
@@ -4370,6 +4473,7 @@ function bindQuickCheckinUi() {
       const historyName = history.client !== history.color ? history.client : "";
       if (nameEl && !nameEl.value.trim() && historyName) nameEl.value = historyName;
       if (phoneEl && !phoneEl.value.trim() && history.phone) phoneEl.value = history.phone;
+      if (history.imei) setQcVehicleType(history.imei);
       if (hintEl) {
         hintEl.textContent = `✓ Patente conocida (última visita: ${history.date}). Datos del cliente autocompletados.`;
         hintEl.classList.remove("quick-checkin-client-hint--warn");
@@ -4380,6 +4484,12 @@ function bindQuickCheckinUi() {
       hintEl.classList.add("quick-checkin-client-hint--warn");
       hintEl.hidden = false;
     }
+  });
+
+  document.querySelector(".qc-vehicle-type-options")?.addEventListener("click", (event) => {
+    const btn = event.target instanceof HTMLElement ? event.target.closest(".qc-vehicle-type-btn") : null;
+    if (!btn) return;
+    setQcVehicleType(btn.dataset.vehicleType || "auto");
   });
 
   document.getElementById("qc-service-options")?.addEventListener("click", (event) => {
@@ -4421,7 +4531,11 @@ function openChargeModal(orderKey) {
   const vehicleEl = document.getElementById("charge-modal-vehicle");
   const servicesEl = document.getElementById("charge-modal-services");
   const amountEl = document.getElementById("charge-amount");
-  if (vehicleEl) vehicleEl.textContent = [order.plate, order.brand].filter(Boolean).join(" · ") || "Auto";
+  if (vehicleEl) {
+    vehicleEl.textContent = [order.plate, order.brand, vehicleTypeLabel(order.vehicleType)]
+      .filter(Boolean)
+      .join(" · ") || "Auto";
+  }
   if (servicesEl)
     servicesEl.textContent = order.services.map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${s.name}`).join(" + ");
   if (amountEl) amountEl.value = String(Math.max(0, Math.round(order.total - order.paid)));

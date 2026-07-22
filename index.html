@@ -17,7 +17,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="icon" href="./assets/logo.png" type="image/png" />
     <link rel="stylesheet" href="./themes.css?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=7" />
+    <link rel="stylesheet" href="./styles.css?v=8" />
     <script>
       (function () {
         var map = {
@@ -775,8 +775,19 @@
                 </label>
               </div>
               <p id="qc-client-hint" class="quick-checkin-client-hint muted" hidden></p>
+              <div class="quick-checkin-vehicle-type">
+                <span class="quick-checkin-services__label">Tipo de vehículo</span>
+                <div class="qc-vehicle-type-options" role="radiogroup" aria-label="Tipo de vehículo">
+                  <button type="button" class="qc-vehicle-type-btn qc-vehicle-type-btn--selected" data-vehicle-type="auto" role="radio" aria-checked="true">
+                    Auto
+                  </button>
+                  <button type="button" class="qc-vehicle-type-btn" data-vehicle-type="camioneta" role="radio" aria-checked="false">
+                    Camioneta
+                  </button>
+                </div>
+              </div>
               <div class="quick-checkin-services">
-                <span class="quick-checkin-services__label">Servicio</span>
+                <span class="quick-checkin-services__label">Servicio <span id="qc-price-hint" class="muted">(precio auto)</span></span>
                 <div id="qc-service-options" class="qc-service-options" role="radiogroup" aria-label="Servicio"></div>
               </div>
               <button type="submit" id="qc-submit" class="quick-checkin-submit">Ingresar auto →</button>
@@ -859,6 +870,13 @@
                     <label>
                       Patente
                       <input id="se-plate" type="text" class="quick-checkin-plate" required />
+                    </label>
+                    <label>
+                      Tipo de vehículo
+                      <select id="se-vehicle-type">
+                        <option value="auto">Auto</option>
+                        <option value="camioneta">Camioneta</option>
+                      </select>
                     </label>
                     <label>
                       Servicio
@@ -989,8 +1007,12 @@
                         <input id="service-name" type="text" required placeholder="Ej: Lavado full" />
                       </label>
                       <label>
-                        Precio (ARS)
+                        Precio auto (ARS)
                         <input id="service-price" type="number" min="0" step="0.01" required value="0" />
+                      </label>
+                      <label>
+                        Precio camioneta (ARS)
+                        <input id="service-price-camioneta" type="number" min="0" step="0.01" required value="0" />
                       </label>
                       <label>
                         Costo (ARS)
@@ -1024,7 +1046,8 @@
                 <thead>
                   <tr>
                     <th>Nombre</th>
-                    <th>Precio</th>
+                    <th>Precio auto</th>
+                    <th>Precio camioneta</th>
                     <th>Costo</th>
                     <th>Estado</th>
                     <th>Notas</th>
@@ -1948,7 +1971,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="./config.js?v=1"></script>
-    <script src="./app.js?v=7"></script>
+    <script src="./app.js?v=8"></script>
     <script src="./business-extras.js?v=1"></script>
   </body>
 </html>
