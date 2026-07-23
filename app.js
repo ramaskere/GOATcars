@@ -3149,16 +3149,18 @@ function openWhatsAppMessage(phone, text) {
 }
 
 function buildWhatsAppReadyMessage(order) {
-  const plate = order.plate || "tu vehículo";
+  const plate = order.plate || "—";
   const name = order.client && order.client !== order.plate ? ` ${order.client}` : "";
-  return `Hola${name}! Tu auto ${plate} ya está listo en GOAT CARWASH. Te esperamos 🙌`;
+  const tipo = normalizeVehicleType(order.vehicleType) === "camioneta" ? "camioneta" : "auto";
+  return `Hola${name}! Te avisamos que su ${tipo} con patente ${plate} ya está listo en GOAT CARWASH. Cuando puedas, pasá a retirarlo. ¡Gracias!`;
 }
 
 function buildWhatsAppUnpaidMessage(order) {
-  const plate = order.plate || "tu vehículo";
+  const plate = order.plate || "—";
   const due = Math.max(0, numeric(order.total, 0) - numeric(order.paid, 0));
+  const tipo = normalizeVehicleType(order.vehicleType) === "camioneta" ? "camioneta" : "auto";
   const services = (order.services || []).map((s) => s.name).filter(Boolean).join(", ") || "lavado";
-  return `Hola! Te recordamos el lavado de ${plate} (${services}) en GOAT CARWASH. Saldo pendiente: ${currency(due)}.`;
+  return `Hola! Te recordamos que el ${tipo} con patente ${plate} (${services}) tiene un saldo pendiente de ${currency(due)} en GOAT CARWASH. ¡Gracias!`;
 }
 
 /** Mismo criterio que en pipeline: @usuario → usuario en minúsculas. */
