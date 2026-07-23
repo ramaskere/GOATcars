@@ -4015,7 +4015,9 @@ function getCarQueueOrders() {
 }
 
 function orderIsPaid(order) {
-  return order.total > 0 ? order.paid >= order.total - 0.01 : order.paid > 0;
+  // Lavado gratis (promo 4+1): total 0 → ya está "cobrado".
+  if (numeric(order?.total, 0) <= 0.01) return true;
+  return order.paid >= order.total - 0.01;
 }
 
 let carQueueFilter = "all"; // all | proceso | impago | listos
@@ -4089,32 +4091,36 @@ function renderCarQueue() {
       .join(" + ");
     const isOldPending = o.status === "en_proceso" && o.date && o.date < today;
     const paid = orderIsPaid(o);
+    const loyalty = getPlateLoyalty(o.plate);
     const payBadge = paid
-      ? `<span class="status-badge status-badge--pagado">Cobrado</span>`
+      ? `<span class="status-badge status-badge--pagado">${loyalty.isCurrentFree || o.total <= 0.01 ? "Gratis" : "Cobrado"}</span>`
       : `<span class="status-badge status-badge--impago">Falta cobrar</span>`;
     let actionHtml = "";
     if (o.status === "en_proceso") {
       actionHtml = `<button type="button" class="car-queue-card__action queue-status-btn" data-key="${escapeHtml(o.key)}" data-next="terminado">Terminado ✓</button>`;
     } else if (!paid) {
-      actionHtml = `<button type="button" class="car-queue-card__action car-queue-card__action--charge queue-charge-btn" data-key="${escapeHtml(o.key)}">Cobrar ${currency(Math.max(0, o.total - o.paid))}</button>`;
+      actionHtml = loyalty.isCurrentFree
+        ? `<button type="button" class="car-queue-card__action car-queue-card__action--charge car-queue-card__action--free queue-charge-btn" data-key="${escapeHtml(o.key)}">Aplicar gratis (4+1)</button>`
+        : `<button type="button" class="car-queue-card__action car-queue-card__action--charge queue-charge-btn" data-key="${escapeHtml(o.key)}">Registrar cobro ${currency(Math.max(0, o.total - o.paid))}</button>`;
     } else if (o.status === "terminado") {
       actionHtml = `<button type="button" class="car-queue-card__action car-queue-card__action--deliver queue-status-btn" data-key="${escapeHtml(o.key)}" data-next="entregado">Entregar auto</button>`;
     } else {
       actionHtml = `<span class="car-queue-card__done">✓ Entregado</span>`;
     }
 
+    const clientLabel = (() => {
+      const known = findClientByPhoneOrName(o.phone || "", o.client || "");
+      return known?.name || (o.client && o.client !== o.plate ? o.client : "");
+    })();
+    const loyaltyHtml = loyalty.isCurrentFree
+      ? `<div class="car-queue-card__loyalty car-queue-card__loyalty--free">${loyalty.dotsHtml} Este lavado es GRATIS (4+1)</div>`
+      : `<div class="car-queue-card__loyalty muted">${loyalty.dotsHtml} ${escapeHtml(loyalty.progressLabel)}</div>`;
+
     const waBtns = [];
-    if (o.phone) {
-      if (o.status === "terminado" || o.status === "entregado") {
-        waBtns.push(
-          `<button type="button" class="car-queue-wa-btn queue-wa-btn" data-key="${escapeHtml(o.key)}" data-wa="listo" title="Avisar por WhatsApp">WhatsApp: listo</button>`
-        );
-      }
-      if (!paid) {
-        waBtns.push(
-          `<button type="button" class="car-queue-wa-btn queue-wa-btn" data-key="${escapeHtml(o.key)}" data-wa="cobro" title="Avisar por WhatsApp">WhatsApp: avisar</button>`
-        );
-      }
+    if (o.phone && (o.status === "terminado" || o.status === "entregado")) {
+      waBtns.push(
+        `<button type="button" class="car-queue-wa-btn queue-wa-btn" data-key="${escapeHtml(o.key)}" data-wa="listo" title="Avisar que ya está listo">Avisar por WhatsApp</button>`
+      );
     }
 
     card.innerHTML = `
@@ -4123,11 +4129,12 @@ function renderCarQueue() {
         <span class="car-queue-card__badges">${renderSaleStatusBadge(o.status)}${payBadge}</span>
       </div>
       <div class="car-queue-card__vehicle muted">${escapeHtml(vehicleLine || "Vehículo sin datos")}</div>
-      ${o.client && o.client !== o.plate ? `<div class="car-queue-card__client">${escapeHtml(o.client)}</div>` : ""}
+      ${clientLabel ? `<div class="car-queue-card__client">${escapeHtml(clientLabel)}</div>` : ""}
       <div class="car-queue-card__services">${servicesLine || "—"}</div>
       ${o.sellerName ? `<div class="car-queue-card__seller muted">Lava: <strong>${escapeHtml(o.sellerName)}</strong></div>` : ""}
+      ${loyaltyHtml}
       <div class="car-queue-card__foot">
-        <span class="car-queue-card__total">${currency(o.total)}</span>
+        <span class="car-queue-card__total">${loyalty.isCurrentFree ? `<s>${currency(o.total)}</s> <strong class="loyalty-free-price">GRATIS</strong>` : currency(o.total)}</span>
         ${isOldPending ? `<span class="car-queue-card__late">Ingresó el ${escapeHtml(o.date)}</span>` : ""}
         ${actionHtml}
       </div>
@@ -4192,9 +4199,7 @@ function bindCarQueueUi() {
     if (waBtn) {
       const order = getCarQueueOrders().find((o) => o.key === waBtn.dataset.key);
       if (!order) return;
-      const msg =
-        waBtn.dataset.wa === "cobro" ? buildWhatsAppUnpaidMessage(order) : buildWhatsAppReadyMessage(order);
-      openWhatsAppMessage(order.phone, msg);
+      openWhatsAppMessage(order.phone, buildWhatsAppReadyMessage(order));
       return;
     }
     const btn = target.closest(".queue-status-btn");
@@ -4530,6 +4535,48 @@ function getPlateOpenDebt(plate) {
   };
 }
 
+/** Promo 4+1 por patente: cada 5.º lavado es gratis. */
+function getPlateLoyalty(plate) {
+  const p = String(plate || "").toUpperCase().replace(/\s+/g, "");
+  const empty = {
+    plate: p,
+    totalVisits: 0,
+    isCurrentFree: false,
+    isNextFree: false,
+    towardFree: 0,
+    remainingToFree: 4,
+    progressLabel: "Promo 4+1: el 5.º lavado es gratis",
+    dotsHtml: "",
+  };
+  if (!p) return empty;
+  const visits = getPlateVisits(p);
+  const totalVisits = visits.length;
+  const isCurrentFree = totalVisits > 0 && totalVisits % 5 === 0;
+  const towardFree = totalVisits % 5; // 0 justo después de un gratis
+  const isNextFree = (totalVisits + 1) % 5 === 0;
+  // Barras: cuántos lavados del ciclo actual (máx 4) antes del gratis
+  const filled = isCurrentFree ? 4 : towardFree;
+  const dots = [0, 1, 2, 3]
+    .map((i) => `<span class="loyalty-dot${i < filled ? " loyalty-dot--on" : ""}"></span>`)
+    .join("");
+  const freeDot = `<span class="loyalty-dot loyalty-dot--gift${isCurrentFree || isNextFree ? " loyalty-dot--on" : ""}" title="Gratis">★</span>`;
+  let progressLabel;
+  if (isCurrentFree) progressLabel = "Este lavado es GRATIS (4+1)";
+  else if (isNextFree) progressLabel = "El próximo lavado es GRATIS";
+  else if (towardFree === 0) progressLabel = "Promo 4+1: te faltan 4 lavados para el gratis";
+  else progressLabel = `Promo 4+1: ${towardFree}/4 · faltan ${5 - towardFree} para el gratis`;
+  return {
+    plate: p,
+    totalVisits,
+    isCurrentFree,
+    isNextFree,
+    towardFree,
+    remainingToFree: isCurrentFree ? 4 : isNextFree ? 0 : 5 - towardFree,
+    progressLabel,
+    dotsHtml: `<span class="loyalty-dots" aria-hidden="true">${dots}${freeDot}</span>`,
+  };
+}
+
 function renderPlateHistoryPanel(plate) {
   const panel = document.getElementById("qc-plate-history");
   if (!panel) return;
@@ -4540,24 +4587,45 @@ function renderPlateHistoryPanel(plate) {
     return;
   }
   const visits = getPlateVisits(p);
+  const loyalty = getPlateLoyalty(p);
+  // Patente nueva: igual mostrar promo 4+1
   if (!visits.length) {
-    panel.hidden = true;
-    panel.innerHTML = "";
+    panel.innerHTML = `
+      <div class="qc-plate-history__head">
+        <strong>Patente ${escapeHtml(p)}</strong>
+        <span class="muted">Sin visitas previas</span>
+      </div>
+      <div class="qc-loyalty-box">
+        ${loyalty.dotsHtml}
+        <p class="qc-loyalty-box__text">Promo 4+1: cada 5.º lavado de esta patente es <strong>gratis</strong>.</p>
+      </div>
+    `;
+    panel.hidden = false;
     return;
   }
   const debt = getPlateOpenDebt(p);
   const clientName = visits.find((v) => v.client && v.client !== p)?.client || "";
   const last5 = visits.slice(0, 5);
+  // Numeración cronológica para marcar cuáles fueron gratis (5, 10, 15…)
+  const chrono = [...visits].reverse();
+  const freeKeys = new Set(
+    chrono.map((v, i) => ((i + 1) % 5 === 0 ? `${v.date}|${v.model}` : null)).filter(Boolean)
+  );
   const rows = last5
     .map((s) => {
       const paid = s.collected >= s.saleTotal - 0.01 && s.collected > 0;
-      return `<li><span>${escapeHtml(s.date || "—")} · ${escapeHtml(s.model || "Servicio")} · ${escapeHtml(vehicleTypeLabel(s.imei))}</span><span class="${paid ? "qc-hist-paid" : "qc-hist-debt"}">${paid ? currency(s.collected) : "Sin cobro"}</span></li>`;
+      const wasFree = s.saleTotal <= 0.01 || freeKeys.has(`${s.date}|${s.model}`);
+      return `<li><span>${escapeHtml(s.date || "—")} · ${escapeHtml(s.model || "Servicio")} · ${escapeHtml(vehicleTypeLabel(s.imei))}</span><span class="${wasFree ? "qc-hist-free" : paid ? "qc-hist-paid" : "qc-hist-debt"}">${wasFree ? "GRATIS" : paid ? currency(s.collected) : "Sin cobro"}</span></li>`;
     })
     .join("");
   panel.innerHTML = `
     <div class="qc-plate-history__head">
       <strong>Historial ${escapeHtml(p)}${clientName ? ` · ${escapeHtml(clientName)}` : ""}</strong>
       <span class="muted">${visits.length} visita${visits.length === 1 ? "" : "s"}</span>
+    </div>
+    <div class="qc-loyalty-box${loyalty.isNextFree || loyalty.isCurrentFree ? " qc-loyalty-box--free" : ""}">
+      ${loyalty.dotsHtml}
+      <p class="qc-loyalty-box__text">${escapeHtml(loyalty.progressLabel)}</p>
     </div>
     ${debt.amount > 0 ? `<p class="qc-plate-history__debt">Debe ${currency(debt.amount)} (${debt.count} pendiente${debt.count === 1 ? "" : "s"})</p>` : `<p class="qc-plate-history__ok">Sin deudas abiertas</p>`}
     <ul class="qc-plate-history__list">${rows}</ul>
@@ -4619,7 +4687,9 @@ function renderQuickCheckinServices() {
     btn.setAttribute("aria-checked", selected ? "true" : "false");
     if (selected) btn.classList.add("qc-service-btn--selected");
     const price = servicePriceForType(svc, qcVehicleType);
-    btn.innerHTML = `<span class="qc-service-btn__name">${escapeHtml(svc.name)}</span><span class="qc-service-btn__price">${currency(price)}</span>`;
+    const plate = (document.getElementById("qc-plate")?.value || "").trim().toUpperCase().replace(/\s+/g, "");
+    const nextFree = plate ? getPlateLoyalty(plate).isNextFree : false;
+    btn.innerHTML = `<span class="qc-service-btn__name">${escapeHtml(svc.name)}</span><span class="qc-service-btn__price">${nextFree ? `<s>${currency(price)}</s> GRATIS` : currency(price)}</span>`;
     wrap.appendChild(btn);
   });
 }
@@ -4660,7 +4730,11 @@ async function saveQuickCheckin() {
     plate;
   const vehicleType = normalizeVehicleType(qcVehicleType);
 
-  const price = servicePriceForType(service, vehicleType);
+  // Promo 4+1 por patente: el próximo lavado (aún no guardado) es el gratis.
+  const pastVisits = getPlateVisits(plate).length;
+  const isFreeWash = (pastVisits + 1) % 5 === 0;
+  const listPrice = servicePriceForType(service, vehicleType);
+  const price = isFreeWash ? 0 : listPrice;
   const cost = numeric(service.cost, 0);
   const sellerSel = document.getElementById("qc-seller");
   const comm = computeSaleCommission(sellerSel?.value || null, price);
@@ -4764,7 +4838,9 @@ async function saveQuickCheckin() {
 
   const feedback = document.getElementById("qc-feedback");
   if (feedback) {
-    feedback.textContent = `✓ ${plate} ingresado a la línea de trabajo`;
+    feedback.textContent = isFreeWash
+      ? `✓ ${plate} ingresado · lavado GRATIS (promo 4+1)`
+      : `✓ ${plate} ingresado a la línea de trabajo`;
     feedback.hidden = false;
     setTimeout(() => {
       feedback.hidden = true;
@@ -4803,6 +4879,7 @@ function bindQuickCheckinUi() {
     const plate = (plateEl.value || "").trim().toUpperCase().replace(/\s+/g, "");
     if (!plate) {
       if (hintEl) hintEl.hidden = true;
+      renderPlateHistoryPanel("");
       return;
     }
     const history = findPlateHistory(plate);
@@ -4818,16 +4895,20 @@ function bindQuickCheckinUi() {
       if (history.imei) setQcVehicleType(history.imei);
       if (hintEl) {
         const label = known?.name || historyName || plate;
-        hintEl.textContent = `✓ Cliente conocido: ${label} (última visita: ${history.date}).`;
+        const loyalty = getPlateLoyalty(plate);
+        const promo = loyalty.isNextFree ? " · ¡Próximo lavado GRATIS!" : "";
+        hintEl.textContent = `✓ Cliente conocido: ${label} (última visita: ${history.date}).${promo}`;
         hintEl.classList.remove("quick-checkin-client-hint--warn");
         hintEl.hidden = false;
       }
       renderPlateHistoryPanel(plate);
+      renderQuickCheckinServices();
     } else if (hintEl) {
       hintEl.textContent = `Patente nueva: cargá un teléfono para poder contactar al cliente.`;
       hintEl.classList.add("quick-checkin-client-hint--warn");
       hintEl.hidden = false;
-      renderPlateHistoryPanel("");
+      renderPlateHistoryPanel(plate);
+      renderQuickCheckinServices();
     }
   });
 
@@ -4872,10 +4953,16 @@ function openChargeModal(orderKey) {
   chargeModalOrderKey = orderKey;
   chargeSelectedMethod = null;
 
+  const loyalty = getPlateLoyalty(order.plate);
+  const isFree = loyalty.isCurrentFree || numeric(order.total, 0) <= 0.01;
+
   const modal = document.getElementById("charge-modal");
+  const titleEl = document.getElementById("charge-modal-title");
   const vehicleEl = document.getElementById("charge-modal-vehicle");
   const servicesEl = document.getElementById("charge-modal-services");
   const amountEl = document.getElementById("charge-amount");
+  const freeHint = document.getElementById("charge-free-hint");
+  if (titleEl) titleEl.textContent = isFree ? "Lavado gratis (4+1)" : "Registrar cobro";
   if (vehicleEl) {
     vehicleEl.textContent = [order.plate, order.brand, vehicleTypeLabel(order.vehicleType)]
       .filter(Boolean)
@@ -4883,13 +4970,29 @@ function openChargeModal(orderKey) {
   }
   if (servicesEl)
     servicesEl.textContent = order.services.map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${s.name}`).join(" + ");
-  if (amountEl) amountEl.value = String(Math.max(0, Math.round(order.total - order.paid)));
+  if (amountEl) {
+    amountEl.value = isFree ? "0" : String(Math.max(0, Math.round(order.total - order.paid)));
+    amountEl.readOnly = isFree;
+  }
+  if (freeHint) {
+    freeHint.hidden = !isFree;
+    freeHint.textContent = isFree
+      ? "Promo 4+1: este lavado no se cobra. Confirmá para cerrarlo como gratis."
+      : "";
+  }
 
   document.querySelectorAll(".charge-method-btn").forEach((btn) => {
     btn.classList.remove("charge-method-btn--selected");
+    if (isFree && btn.dataset.method === "otro") {
+      btn.classList.add("charge-method-btn--selected");
+      chargeSelectedMethod = "otro";
+    }
   });
   const confirmBtn = document.getElementById("charge-confirm");
-  if (confirmBtn) confirmBtn.disabled = true;
+  if (confirmBtn) {
+    confirmBtn.disabled = !isFree;
+    confirmBtn.textContent = isFree ? "Confirmar gratis" : "Confirmar cobro";
+  }
 
   if (modal) {
     modal.hidden = false;
@@ -4903,6 +5006,20 @@ function closeChargeModal() {
     modal.hidden = true;
     modal.setAttribute("aria-hidden", "true");
   }
+  const amountEl = document.getElementById("charge-amount");
+  if (amountEl) amountEl.readOnly = false;
+  const freeHint = document.getElementById("charge-free-hint");
+  if (freeHint) {
+    freeHint.hidden = true;
+    freeHint.textContent = "";
+  }
+  const titleEl = document.getElementById("charge-modal-title");
+  if (titleEl) titleEl.textContent = "Registrar cobro";
+  const confirmBtn = document.getElementById("charge-confirm");
+  if (confirmBtn) {
+    confirmBtn.textContent = "Confirmar cobro";
+    confirmBtn.disabled = true;
+  }
   chargeModalOrderKey = null;
   chargeSelectedMethod = null;
 }
@@ -4912,10 +5029,17 @@ async function confirmChargeOrder() {
   const method = CHARGE_METHOD_FIELDS[chargeSelectedMethod];
   if (!order || !method) return;
 
+  const loyalty = getPlateLoyalty(order.plate);
+  const isFree = loyalty.isCurrentFree || numeric(order.total, 0) <= 0.01;
+
   const amountEl = document.getElementById("charge-amount");
   const amount = Math.max(0, numeric(amountEl?.value, 0));
-  if (amount <= 0) {
+  if (!isFree && amount <= 0) {
     alert("El monto a cobrar tiene que ser mayor a 0.");
+    return;
+  }
+  if (isFree && amount > 0) {
+    alert("Este lavado es gratis (promo 4+1). Dejá el monto en 0.");
     return;
   }
 
@@ -4923,6 +5047,84 @@ async function confirmChargeOrder() {
     order.orderId ? String(s.orderId) === String(order.orderId) : String(s.id) === String(order.firstSaleId)
   );
   if (affected.length === 0) return;
+
+  const finishedAt = order.finishedAt || new Date().toISOString();
+
+  // Lavado gratis: total 0, sin pagos, estado entregado.
+  if (isFree) {
+    if (useCloud) {
+      try {
+        const userId = await getUserId();
+        for (const s of affected) {
+          const patch = {
+            sale_total: 0,
+            unit_sale: 0,
+            profit: 0 - numeric(s.costTotal, 0),
+            payment_cash: 0,
+            payment_transfer: 0,
+            payment_card: 0,
+            payment_other: 0,
+            commission_amount: 0,
+            status: "entregado",
+            finished_at: finishedAt,
+          };
+          let { error } = await supabaseClient
+            .from("sales")
+            .update(patch)
+            .eq("user_id", userId)
+            .eq("id", s.id);
+          if (error && /schema cache|could not find/i.test(error.message || "")) {
+            ({ error } = await supabaseClient
+              .from("sales")
+              .update({
+                sale_total: 0,
+                unit_sale: 0,
+                profit: 0 - numeric(s.costTotal, 0),
+                payment_cash: 0,
+                payment_transfer: 0,
+                payment_card: 0,
+                payment_other: 0,
+              })
+              .eq("user_id", userId)
+              .eq("id", s.id));
+          }
+          if (error) throw error;
+        }
+      } catch (e) {
+        alert(`No se pudo registrar el gratis: ${e?.message || e}`);
+        return;
+      }
+    }
+    affected.forEach((s) => {
+      patchCachedSaleAfterEdit(s.id, {
+        saleTotal: 0,
+        unitSale: 0,
+        profit: 0 - numeric(s.costTotal, 0),
+        paymentCash: 0,
+        paymentTransfer: 0,
+        paymentCard: 0,
+        paymentOther: 0,
+        commissionAmount: 0,
+        status: "entregado",
+        finishedAt,
+      });
+    });
+
+    lastTicketData = {
+      phone: order.phone || affected.find((s) => s.phone)?.phone || "",
+      client: order.client || affected[0]?.client || order.plate || "—",
+      plate: order.plate || "—",
+      vehicle: [order.brand, vehicleTypeLabel(order.vehicleType)].filter(Boolean).join(" · ") || "—",
+      services: order.services.map((s) => `${s.qty > 1 ? `${s.qty}× ` : ""}${s.name}`).join(" + ") || "—",
+      method: "Promo 4+1 (gratis)",
+      amount: 0,
+      datetime: new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }),
+    };
+    closeChargeModal();
+    renderAll();
+    openTicketModal(lastTicketData);
+    return;
+  }
 
   // Repartimos el cobro entre las líneas del ingreso (proporcional a su total); la última absorbe el redondeo.
   const orderTotal = affected.reduce((acc, s) => acc + numeric(s.saleTotal, 0), 0) || 1;
@@ -4933,8 +5135,6 @@ async function confirmChargeOrder() {
     assigned += share;
     return share;
   });
-
-  const finishedAt = order.finishedAt || new Date().toISOString();
 
   if (useCloud) {
     try {

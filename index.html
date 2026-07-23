@@ -17,7 +17,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="icon" href="./assets/logo.png" type="image/png" />
     <link rel="stylesheet" href="./themes.css?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=9" />
+    <link rel="stylesheet" href="./styles.css?v=10" />
     <script>
       (function () {
         var map = {
@@ -831,6 +831,7 @@
               </div>
               <p class="charge-modal__vehicle" id="charge-modal-vehicle">—</p>
               <p class="charge-modal__services muted" id="charge-modal-services">—</p>
+              <p id="charge-free-hint" class="charge-free-hint" hidden></p>
               <label class="charge-modal__amount-label">
                 Monto a cobrar
                 <input id="charge-amount" type="number" min="0" step="1" inputmode="numeric" />
@@ -2019,7 +2020,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="./config.js?v=1"></script>
-    <script src="./app.js?v=13"></script>
+    <script src="./app.js?v=14"></script>
     <script src="./business-extras.js?v=4"></script>
   </body>
 </html>

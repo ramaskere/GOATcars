@@ -8988,6 +8988,91 @@ body.role-empleado #tab-ventas table td:nth-child(8) {
 }
 .qc-hist-paid { color: #15803d; font-weight: 700; }
 .qc-hist-debt { color: #b91c1c; font-weight: 700; }
+.qc-hist-free { color: #a16207; font-weight: 800; }
+
+.loyalty-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.loyalty-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid #94a3b8;
+  background: transparent;
+  display: inline-block;
+}
+.loyalty-dot--on {
+  background: #84cc16;
+  border-color: #65a30d;
+}
+.loyalty-dot--gift {
+  width: auto;
+  height: auto;
+  border: none;
+  background: none;
+  font-size: 12px;
+  line-height: 1;
+  color: #94a3b8;
+}
+.loyalty-dot--gift.loyalty-dot--on {
+  color: #ca8a04;
+}
+
+.qc-loyalty-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.qc-loyalty-box--free {
+  background: rgba(254, 240, 138, 0.45);
+  border-color: rgba(202, 138, 4, 0.45);
+}
+.qc-loyalty-box__text {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.car-queue-card__loyalty {
+  font-size: 12px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.car-queue-card__loyalty--free {
+  color: #a16207;
+  font-weight: 700;
+}
+.loyalty-free-price {
+  color: #a16207;
+}
+.car-queue-card__action--free {
+  border-color: rgba(202, 138, 4, 0.55);
+  background: rgba(254, 240, 138, 0.55);
+  color: #854d0e;
+}
+.charge-free-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(254, 240, 138, 0.55);
+  border: 1px solid rgba(202, 138, 4, 0.45);
+  color: #854d0e;
+  font-size: 13px;
+  font-weight: 600;
+}
 
 .ticket-modal {
   position: fixed;
