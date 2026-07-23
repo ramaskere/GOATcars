@@ -1007,30 +1007,49 @@
     return `n:${String(sale.client || "").trim().toLowerCase()}`;
   }
 
-  function openClientProfile(clientName) {
+  function openClientProfile(clientName, phone) {
     const c = crm();
     const name = String(clientName || "").trim();
-    if (!name) return;
+    const phoneArg = String(phone || "").trim();
+    if (!name && !phoneArg) return;
     const sales =
       typeof c.getSalesForClientIdentity === "function"
-        ? c.getSalesForClientIdentity(name)
+        ? c.getSalesForClientIdentity(name, phoneArg)
         : c
             .getSales()
-            .filter((s) => String(s.client || "").trim() === name)
+            .filter((s) => {
+              const samePhone =
+                phoneArg &&
+                String(s.phone || "").replace(/\D/g, "") === phoneArg.replace(/\D/g, "") &&
+                phoneArg.replace(/\D/g, "").length >= 8;
+              const sameName =
+                name && String(s.client || "").trim().toLowerCase() === name.toLowerCase();
+              return samePhone || sameName;
+            })
             .sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const modal = document.getElementById("client-profile-modal");
     const body = document.getElementById("client-profile-body");
     if (!modal || !body) return;
+    const dirMatch =
+      typeof c.findClientByPhoneOrName === "function"
+        ? c.findClientByPhoneOrName(phoneArg || sales[0]?.phone || "", name)
+        : null;
     const displayName =
+      dirMatch?.name ||
+      (typeof c.canonicalClientName === "function" && sales[0]
+        ? c.canonicalClientName(sales[0])
+        : null) ||
       (typeof c.preferredClientDisplayName === "function" && sales[0]
         ? c.preferredClientDisplayName(sales[0])
-        : null) || name;
+        : null) ||
+      name ||
+      "Cliente";
     const total = sales.reduce((a, s) => a + c.numeric(s.saleTotal, 0), 0);
     const collected = sales.reduce(
       (a, s) => a + (typeof c.saleCollectedAmount === "function" ? c.saleCollectedAmount(s) : c.numeric(s.saleTotal, 0)),
       0
     );
-    const phone = sales.find((s) => s.phone)?.phone || "—";
+    const phoneShow = sales.find((s) => s.phone)?.phone || phoneArg || "—";
     const plates = [
       ...new Set(
         sales
@@ -1041,10 +1060,10 @@
     const ig = sales.find((s) => s.igHandle)?.igHandle || "—";
     body.innerHTML = `
       <div class="client-profile-hero">
-        <div class="client-profile-avatar" aria-hidden="true">${c.escapeHtml(displayName.charAt(0).toUpperCase())}</div>
+        <div class="client-profile-avatar" aria-hidden="true">${c.escapeHtml(String(displayName).charAt(0).toUpperCase())}</div>
         <div class="client-profile-hero__info">
           <h3 class="client-profile-name">${c.escapeHtml(displayName)}</h3>
-          <p class="client-profile-meta muted">${c.escapeHtml(phone)}${plates.length ? ` · ${c.escapeHtml(plates.join(", "))}` : ""}${ig !== "—" ? ` · ${c.escapeHtml(ig)}` : ""}</p>
+          <p class="client-profile-meta muted">${c.escapeHtml(phoneShow)}${plates.length ? ` · ${c.escapeHtml(plates.join(", "))}` : ""}${ig !== "—" ? ` · ${c.escapeHtml(ig)}` : ""}</p>
         </div>
       </div>
       <div class="client-profile-stats">
@@ -1065,12 +1084,16 @@
         <table>
           <thead><tr><th>Fecha</th><th>Patente</th><th>Servicio</th><th>Total</th></tr></thead>
           <tbody>
-            ${sales
-              .map(
-                (s) =>
-                  `<tr><td>${s.date}</td><td>${c.escapeHtml(s.color || "—")}</td><td>${c.escapeHtml(s.model)}</td><td>${c.currency(s.saleTotal)}</td></tr>`
-              )
-              .join("")}
+            ${
+              sales.length
+                ? sales
+                    .map(
+                      (s) =>
+                        `<tr><td>${s.date}</td><td>${c.escapeHtml(s.color || "—")}</td><td>${c.escapeHtml(s.model)}</td><td>${c.currency(s.saleTotal)}</td></tr>`
+                    )
+                    .join("")
+                : `<tr><td colspan="4" class="muted">Sin visitas</td></tr>`
+            }
           </tbody>
         </table>
       </div>

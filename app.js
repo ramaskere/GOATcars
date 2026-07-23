@@ -1107,7 +1107,7 @@ function preferredClientDisplayName(sale) {
 function getClientDirectoryFromSales() {
   const sales = getSales()
     .slice()
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const map = new Map();
   for (const s of sales) {
     const key = clientIdentityKey(s);
@@ -1136,6 +1136,13 @@ function getClientDirectoryFromSales() {
     // Preferí un nombre real (no patente) si aparece después.
     if (isPlateLikeClientName(row.name, row.plates[0]) && !isPlateLikeClientName(displayName, plate)) {
       row.name = displayName;
+    } else if (
+      normalizeClientName(row.name).toLowerCase() === normalizeClientName(displayName).toLowerCase() &&
+      row.name === row.name.toLowerCase() &&
+      displayName !== displayName.toLowerCase()
+    ) {
+      // Mismo nombre con mejor mayúsculas (POBLETE vs poblete).
+      row.name = displayName;
     }
     if (plate && !row.plates.includes(plate)) row.plates.push(plate);
   }
@@ -1157,18 +1164,33 @@ function findClientByPhoneOrName(phone, name) {
   return null;
 }
 
-function getSalesForClientIdentity(clientNameOrKey) {
+function getSalesForClientIdentity(clientNameOrKey, phone) {
   const raw = String(clientNameOrKey || "").trim();
-  if (!raw) return [];
-  // Si viene una key (p:… / n:…), usarla; si no, resolver desde nombre/teléfono.
+  const phoneRaw = String(phone || "").trim();
+  // Si viene una key (p:… / n:…), usarla; si no, resolver desde teléfono (prioridad) o nombre.
   let key = raw.startsWith("p:") || raw.startsWith("n:") || raw.startsWith("pl:") ? raw : "";
   if (!key) {
-    const match = findClientByPhoneOrName("", raw) || getClientDirectoryFromSales().find((c) => c.name === raw);
-    key = match?.key || `n:${normalizeClientName(raw).toLowerCase()}`;
+    const match =
+      findClientByPhoneOrName(phoneRaw, raw) ||
+      findClientByPhoneOrName("", raw) ||
+      getClientDirectoryFromSales().find(
+        (c) => normalizeClientName(c.name).toLowerCase() === normalizeClientName(raw).toLowerCase()
+      );
+    if (match?.key) key = match.key;
+    else if (normalizePhoneDigits(phoneRaw).length >= 8) key = `p:${normalizePhoneDigits(phoneRaw)}`;
+    else if (raw) key = `n:${normalizeClientName(raw).toLowerCase()}`;
   }
+  if (!key) return [];
   return getSales()
     .filter((s) => clientIdentityKey(s) === key)
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+}
+
+/** Nombre canónico del directorio (mismo teléfono = mismo nombre en toda la UI). */
+function canonicalClientName(sale) {
+  const known = findClientByPhoneOrName(sale?.phone || "", sale?.client || "");
+  if (known?.name) return known.name;
+  return preferredClientDisplayName(sale);
 }
 
 function refreshSaleClientSelect() {
@@ -3909,7 +3931,7 @@ function renderSales() {
     if (hiIds.includes(String(sale.id))) row.classList.add("alert-row--match");
     row.innerHTML = `
       <td>${sale.date}</td>
-      <td><button type="button" class="linkish sale-client-btn" data-client="${escapeHtml(sale.client)}">${escapeHtml(sale.client)}</button><div class="muted">${escapeHtml(sale.phone || "—")}</div>${
+      <td><button type="button" class="linkish sale-client-btn" data-client="${escapeHtml(canonicalClientName(sale))}" data-phone="${escapeHtml(sale.phone || "")}">${escapeHtml(canonicalClientName(sale))}</button><div class="muted">${escapeHtml(sale.phone || "—")}</div>${
         sale.igHandle
           ? `<div class="muted">${escapeHtml(sale.igHandle.startsWith("@") ? sale.igHandle : `@${sale.igHandle}`)}</div>`
           : ""
@@ -13466,7 +13488,8 @@ salesBody.addEventListener("click", async (event) => {
   const clientBtn = target.closest(".sale-client-btn");
   if (clientBtn) {
     const name = clientBtn.dataset.client || "";
-    window.__businessExtras?.openClientProfile?.(name);
+    const phone = clientBtn.dataset.phone || "";
+    window.__businessExtras?.openClientProfile?.(name, phone);
     return;
   }
   const editSale = target.closest(".edit-sale-btn");
@@ -14918,6 +14941,8 @@ window.__crm = {
   getClientDirectoryFromSales,
   getSalesForClientIdentity,
   preferredClientDisplayName,
+  canonicalClientName,
+  findClientByPhoneOrName,
   clientIdentityKey,
   saleCollectedAmount,
   getDashboardMonthKey,
