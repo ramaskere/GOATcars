@@ -1011,42 +1011,64 @@
     const c = crm();
     const name = String(clientName || "").trim();
     if (!name) return;
-    const sales = c
-      .getSales()
-      .filter((s) => String(s.client || "").trim() === name)
-      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const sales =
+      typeof c.getSalesForClientIdentity === "function"
+        ? c.getSalesForClientIdentity(name)
+        : c
+            .getSales()
+            .filter((s) => String(s.client || "").trim() === name)
+            .sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const modal = document.getElementById("client-profile-modal");
     const body = document.getElementById("client-profile-body");
     if (!modal || !body) return;
+    const displayName =
+      (typeof c.preferredClientDisplayName === "function" && sales[0]
+        ? c.preferredClientDisplayName(sales[0])
+        : null) || name;
     const total = sales.reduce((a, s) => a + c.numeric(s.saleTotal, 0), 0);
+    const collected = sales.reduce(
+      (a, s) => a + (typeof c.saleCollectedAmount === "function" ? c.saleCollectedAmount(s) : c.numeric(s.saleTotal, 0)),
+      0
+    );
     const phone = sales.find((s) => s.phone)?.phone || "—";
+    const plates = [
+      ...new Set(
+        sales
+          .map((s) => String(s.color || "").toUpperCase().replace(/\s+/g, ""))
+          .filter(Boolean)
+      ),
+    ];
     const ig = sales.find((s) => s.igHandle)?.igHandle || "—";
     body.innerHTML = `
       <div class="client-profile-hero">
-        <div class="client-profile-avatar" aria-hidden="true">${c.escapeHtml(name.charAt(0).toUpperCase())}</div>
+        <div class="client-profile-avatar" aria-hidden="true">${c.escapeHtml(displayName.charAt(0).toUpperCase())}</div>
         <div class="client-profile-hero__info">
-          <h3 class="client-profile-name">${c.escapeHtml(name)}</h3>
-          <p class="client-profile-meta muted">${c.escapeHtml(phone)}${ig !== "—" ? ` · ${c.escapeHtml(ig)}` : ""}</p>
+          <h3 class="client-profile-name">${c.escapeHtml(displayName)}</h3>
+          <p class="client-profile-meta muted">${c.escapeHtml(phone)}${plates.length ? ` · ${c.escapeHtml(plates.join(", "))}` : ""}${ig !== "—" ? ` · ${c.escapeHtml(ig)}` : ""}</p>
         </div>
       </div>
       <div class="client-profile-stats">
         <article class="client-profile-stat">
-          <span class="client-profile-stat__label">Compras</span>
+          <span class="client-profile-stat__label">Visitas</span>
           <strong class="client-profile-stat__val">${sales.length}</strong>
         </article>
         <article class="client-profile-stat">
-          <span class="client-profile-stat__label">Total gastado</span>
+          <span class="client-profile-stat__label">Cobrado</span>
+          <strong class="client-profile-stat__val">${c.currency(collected)}</strong>
+        </article>
+        <article class="client-profile-stat">
+          <span class="client-profile-stat__label">Total servicios</span>
           <strong class="client-profile-stat__val">${c.currency(total)}</strong>
         </article>
       </div>
       <div class="table-wrap client-profile-table">
         <table>
-          <thead><tr><th>Fecha</th><th>Equipo</th><th>Total</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Patente</th><th>Servicio</th><th>Total</th></tr></thead>
           <tbody>
             ${sales
               .map(
                 (s) =>
-                  `<tr><td>${s.date}</td><td>${c.escapeHtml(s.model)}</td><td>${c.currency(s.saleTotal)}</td></tr>`
+                  `<tr><td>${s.date}</td><td>${c.escapeHtml(s.color || "—")}</td><td>${c.escapeHtml(s.model)}</td><td>${c.currency(s.saleTotal)}</td></tr>`
               )
               .join("")}
           </tbody>

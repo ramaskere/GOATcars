@@ -1069,22 +1069,106 @@ function formatCopyAsSlides(copyText, editable) {
   return html;
 }
 
-/** Clientes únicos desde ventas (nombre + último teléfono / IG vistos en la venta más reciente). */
+/** Clientes únicos desde ventas: mismo teléfono = mismo cliente; si no hay teléfono, mismo nombre. */
+function normalizeClientName(name) {
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isPlateLikeClientName(name, plate) {
+  const n = normalizeClientName(name).toUpperCase().replace(/\s+/g, "");
+  const p = String(plate || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  return Boolean(n && p && n === p);
+}
+
+/** Clave estable de cliente: teléfono (≥8 dígitos) gana; si no, nombre normalizado. */
+function clientIdentityKey(saleOrObj) {
+  if (!saleOrObj) return "";
+  const phone = normalizePhoneDigits(saleOrObj.phone);
+  if (phone.length >= 8) return `p:${phone}`;
+  const name = normalizeClientName(saleOrObj.client ?? saleOrObj.name).toLowerCase();
+  if (name) return `n:${name}`;
+  const plate = String(saleOrObj.color ?? saleOrObj.plate ?? "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  return plate ? `pl:${plate}` : "";
+}
+
+function preferredClientDisplayName(sale) {
+  const name = normalizeClientName(sale?.client);
+  const plate = String(sale?.color || "").toUpperCase().replace(/\s+/g, "");
+  if (name && !isPlateLikeClientName(name, plate)) return name;
+  return name || plate || "Cliente";
+}
+
 function getClientDirectoryFromSales() {
-  const sales = getSales();
+  const sales = getSales()
+    .slice()
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   const map = new Map();
   for (const s of sales) {
-    const name = (s.client || "").trim();
-    if (!name) continue;
-    if (map.has(name)) continue;
-    map.set(name, {
-      phone: (s.phone || "").trim(),
-      ig: (s.igHandle || "").trim(),
-    });
+    const key = clientIdentityKey(s);
+    if (!key) continue;
+    const displayName = preferredClientDisplayName(s);
+    const phone = (s.phone || "").trim();
+    const plate = String(s.color || "")
+      .toUpperCase()
+      .replace(/\s+/g, "");
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        name: displayName,
+        phone,
+        ig: (s.igHandle || "").trim(),
+        plates: plate ? [plate] : [],
+        visits: 1,
+        lastDate: s.date || "",
+      });
+      continue;
+    }
+    const row = map.get(key);
+    row.visits += 1;
+    if (phone && !row.phone) row.phone = phone;
+    if ((s.igHandle || "").trim() && !row.ig) row.ig = (s.igHandle || "").trim();
+    // Preferí un nombre real (no patente) si aparece después.
+    if (isPlateLikeClientName(row.name, row.plates[0]) && !isPlateLikeClientName(displayName, plate)) {
+      row.name = displayName;
+    }
+    if (plate && !row.plates.includes(plate)) row.plates.push(plate);
   }
-  return Array.from(map.entries())
-    .map(([name, { phone, ig }]) => ({ name, phone, ig }))
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+function findClientByPhoneOrName(phone, name) {
+  const phoneKey = normalizePhoneDigits(phone);
+  const nameKey = normalizeClientName(name).toLowerCase();
+  const dir = getClientDirectoryFromSales();
+  if (phoneKey.length >= 8) {
+    const byPhone = dir.find((c) => normalizePhoneDigits(c.phone) === phoneKey);
+    if (byPhone) return byPhone;
+  }
+  if (nameKey) {
+    const byName = dir.find((c) => normalizeClientName(c.name).toLowerCase() === nameKey);
+    if (byName) return byName;
+  }
+  return null;
+}
+
+function getSalesForClientIdentity(clientNameOrKey) {
+  const raw = String(clientNameOrKey || "").trim();
+  if (!raw) return [];
+  // Si viene una key (p:… / n:…), usarla; si no, resolver desde nombre/teléfono.
+  let key = raw.startsWith("p:") || raw.startsWith("n:") || raw.startsWith("pl:") ? raw : "";
+  if (!key) {
+    const match = findClientByPhoneOrName("", raw) || getClientDirectoryFromSales().find((c) => c.name === raw);
+    key = match?.key || `n:${normalizeClientName(raw).toLowerCase()}`;
+  }
+  return getSales()
+    .filter((s) => clientIdentityKey(s) === key)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 }
 
 function refreshSaleClientSelect() {
@@ -1095,13 +1179,18 @@ function refreshSaleClientSelect() {
   optNew.value = "__new__";
   optNew.textContent = "Nuevo cliente…";
   saleClientSelect.appendChild(optNew);
-  for (const { name, phone, ig } of getClientDirectoryFromSales()) {
+  for (const client of getClientDirectoryFromSales()) {
     const opt = document.createElement("option");
-    opt.value = name;
-    const bits = [phone || null, ig ? `@${ig.replace(/^@+/, "")}` : null].filter(Boolean);
-    opt.textContent = bits.length ? `${name} · ${bits.join(" · ")}` : name;
-    opt.dataset.phone = phone;
-    opt.dataset.ig = ig || "";
+    opt.value = client.name;
+    const bits = [
+      client.phone || null,
+      client.plates?.length ? client.plates.join(", ") : null,
+      client.visits > 1 ? `${client.visits} visitas` : null,
+    ].filter(Boolean);
+    opt.textContent = bits.length ? `${client.name} · ${bits.join(" · ")}` : client.name;
+    opt.dataset.phone = client.phone || "";
+    opt.dataset.ig = client.ig || "";
+    opt.dataset.clientKey = client.key;
     saleClientSelect.appendChild(opt);
   }
   if (nameKeep && [...saleClientSelect.options].some((o) => o.value === nameKeep)) {
@@ -3157,10 +3246,9 @@ function buildWhatsAppReadyMessage(order) {
 
 function buildWhatsAppUnpaidMessage(order) {
   const plate = order.plate || "—";
-  const due = Math.max(0, numeric(order.total, 0) - numeric(order.paid, 0));
+  const name = order.client && order.client !== order.plate ? ` ${order.client}` : "";
   const tipo = normalizeVehicleType(order.vehicleType) === "camioneta" ? "camioneta" : "auto";
-  const services = (order.services || []).map((s) => s.name).filter(Boolean).join(", ") || "lavado";
-  return `Hola! Te recordamos que el ${tipo} con patente ${plate} (${services}) tiene un saldo pendiente de ${currency(due)} en GOAT CARWASH. ¡Gracias!`;
+  return `Hola${name}! Cuando puedas, te esperamos en GOAT CARWASH para coordinar el pago del lavado de su ${tipo} con patente ${plate}. ¡Gracias!`;
 }
 
 /** Mismo criterio que en pipeline: @usuario → usuario en minúsculas. */
@@ -4002,7 +4090,7 @@ function renderCarQueue() {
       }
       if (!paid) {
         waBtns.push(
-          `<button type="button" class="car-queue-wa-btn car-queue-wa-btn--debt queue-wa-btn" data-key="${escapeHtml(o.key)}" data-wa="cobro" title="Recordar cobro por WhatsApp">WhatsApp: cobrar</button>`
+          `<button type="button" class="car-queue-wa-btn queue-wa-btn" data-key="${escapeHtml(o.key)}" data-wa="cobro" title="Avisar por WhatsApp">WhatsApp: avisar</button>`
         );
       }
     }
@@ -4377,9 +4465,35 @@ function findPlateHistory(plate) {
 function getPlateVisits(plate) {
   const p = String(plate || "").toUpperCase().replace(/\s+/g, "");
   if (!p) return [];
-  return getSales()
+  const sales = getSales()
     .filter((s) => String(s.color || "").toUpperCase().replace(/\s+/g, "") === p)
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  // Agrupar por order_id (un ingreso = una visita), no por cada línea de servicio.
+  const groups = new Map();
+  for (const s of sales) {
+    const key = s.orderId ? `ord:${s.orderId}` : `sale:${s.id}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        date: s.date || "",
+        client: preferredClientDisplayName(s),
+        phone: s.phone || "",
+        model: s.model || "Servicio",
+        services: [s.model || "Servicio"],
+        imei: s.imei || "",
+        saleTotal: numeric(s.saleTotal, 0),
+        collected: saleCollectedAmount(s),
+        status: normalizeSaleStatus(s.status),
+      });
+    } else {
+      const g = groups.get(key);
+      g.saleTotal += numeric(s.saleTotal, 0);
+      g.collected += saleCollectedAmount(s);
+      if (s.model && !g.services.includes(s.model)) g.services.push(s.model);
+      g.model = g.services.join(" + ");
+      if (!g.phone && s.phone) g.phone = s.phone;
+    }
+  }
+  return [...groups.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 function getPlateOpenDebt(plate) {
@@ -4410,17 +4524,17 @@ function renderPlateHistoryPanel(plate) {
     return;
   }
   const debt = getPlateOpenDebt(p);
+  const clientName = visits.find((v) => v.client && v.client !== p)?.client || "";
   const last5 = visits.slice(0, 5);
   const rows = last5
     .map((s) => {
-      const collected = saleCollectedAmount(s);
-      const paid = collected >= numeric(s.saleTotal, 0) - 0.01 && collected > 0;
-      return `<li><span>${escapeHtml(s.date || "—")} · ${escapeHtml(s.model || "Servicio")} · ${escapeHtml(vehicleTypeLabel(s.imei))}</span><span class="${paid ? "qc-hist-paid" : "qc-hist-debt"}">${paid ? currency(collected) : "Sin cobro"}</span></li>`;
+      const paid = s.collected >= s.saleTotal - 0.01 && s.collected > 0;
+      return `<li><span>${escapeHtml(s.date || "—")} · ${escapeHtml(s.model || "Servicio")} · ${escapeHtml(vehicleTypeLabel(s.imei))}</span><span class="${paid ? "qc-hist-paid" : "qc-hist-debt"}">${paid ? currency(s.collected) : "Sin cobro"}</span></li>`;
     })
     .join("");
   panel.innerHTML = `
     <div class="qc-plate-history__head">
-      <strong>Historial ${escapeHtml(p)}</strong>
+      <strong>Historial ${escapeHtml(p)}${clientName ? ` · ${escapeHtml(clientName)}` : ""}</strong>
       <span class="muted">${visits.length} visita${visits.length === 1 ? "" : "s"}</span>
     </div>
     ${debt.amount > 0 ? `<p class="qc-plate-history__debt">Debe ${currency(debt.amount)} (${debt.count} pendiente${debt.count === 1 ? "" : "s"})</p>` : `<p class="qc-plate-history__ok">Sin deudas abiertas</p>`}
@@ -4515,7 +4629,13 @@ async function saveQuickCheckin() {
   }
   const phone = phoneTyped || historyPhone;
   const historyName = history && history.client !== history.color ? history.client : "";
-  const clientName = nameTyped || historyName || plate;
+  // Unificar cliente: si el teléfono ya existe, reutilizar el nombre canónico.
+  const knownClient = findClientByPhoneOrName(phone, nameTyped || historyName);
+  const clientName =
+    normalizeClientName(nameTyped) ||
+    knownClient?.name ||
+    normalizeClientName(historyName) ||
+    plate;
   const vehicleType = normalizeVehicleType(qcVehicleType);
 
   const price = servicePriceForType(service, vehicleType);
@@ -4644,6 +4764,15 @@ function bindQuickCheckinUi() {
     plateEl.value = plateEl.value.toUpperCase();
   });
 
+  // Si tipean un teléfono conocido, completar nombre del cliente unificado.
+  document.getElementById("qc-phone")?.addEventListener("change", () => {
+    const phoneEl = document.getElementById("qc-phone");
+    const nameEl = document.getElementById("qc-name");
+    const known = findClientByPhoneOrName(phoneEl?.value || "", nameEl?.value || "");
+    if (!known) return;
+    if (nameEl && !nameEl.value.trim()) nameEl.value = known.name;
+  });
+
   // Con patente conocida: autocompleta nombre/teléfono y avisa; con patente nueva pide teléfono.
   plateEl?.addEventListener("change", () => {
     const hintEl = document.getElementById("qc-client-hint");
@@ -4657,11 +4786,17 @@ function bindQuickCheckinUi() {
     const history = findPlateHistory(plate);
     if (history) {
       const historyName = history.client !== history.color ? history.client : "";
-      if (nameEl && !nameEl.value.trim() && historyName) nameEl.value = historyName;
-      if (phoneEl && !phoneEl.value.trim() && history.phone) phoneEl.value = history.phone;
+      const known = findClientByPhoneOrName(history.phone, historyName);
+      if (nameEl && !nameEl.value.trim()) {
+        nameEl.value = known?.name || historyName || "";
+      }
+      if (phoneEl && !phoneEl.value.trim() && (history.phone || known?.phone)) {
+        phoneEl.value = history.phone || known.phone;
+      }
       if (history.imei) setQcVehicleType(history.imei);
       if (hintEl) {
-        hintEl.textContent = `✓ Patente conocida (última visita: ${history.date}). Datos del cliente autocompletados.`;
+        const label = known?.name || historyName || plate;
+        hintEl.textContent = `✓ Cliente conocido: ${label} (última visita: ${history.date}).`;
         hintEl.classList.remove("quick-checkin-client-hint--warn");
         hintEl.hidden = false;
       }
@@ -14780,6 +14915,11 @@ window.__crm = {
   getCash,
   getInventory,
   getReceivables,
+  getClientDirectoryFromSales,
+  getSalesForClientIdentity,
+  preferredClientDisplayName,
+  clientIdentityKey,
+  saleCollectedAmount,
   getDashboardMonthKey,
   salesForMonthKey,
   recordInMonth,
